@@ -71,7 +71,7 @@
     "@puppeteer/browsers": "^2.6.1",
     "axios": "^1.7.9",
     "form-data": "^4.0.1",
-    "puppeteer": "^23.10.4"
+    "puppeteer": "^23.11.1"
   },
   "devDependencies": {
     "@github/local-action": "^2.2.1",
