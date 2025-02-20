@@ -2,8 +2,8 @@ import * as core from '@actions/core'
 import axios from 'axios'
 import { SearchResponse, Urls } from './types'
 import fs from 'fs'
-import archiver from 'archiver'
 import path from 'path'
+import yazl from 'yazl'
 
 import { Browser, getInstalledBrowsers, install } from '@puppeteer/browsers'
 const CACHE_DIR = '/home/runner/.cache/puppeteer'
@@ -102,25 +102,46 @@ export function getEnv(name: string): string {
   return process.env[name]
 }
 
-export async function zipAsset(): Promise<string> {
+export async function zipAsset(assetName: string): Promise<string> {
   core.debug('Zipping asset...')
 
-  const _path = getEnv('GITHUB_WORKSPACE')
-  const output = fs.createWriteStream('cfx-portal-upload.zip')
+  const workspacePath = getEnv('GITHUB_WORKSPACE')
+  const outputZipPath = 'cfx-portal-upload.zip'
+  const zipfile = new yazl.ZipFile()
 
-  const archive = archiver('zip', {
-    zlib: { level: 9 }
-  })
-
-  archive.pipe(output)
+  function addDirectoryToZip(dir: string, zipPath: string) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      const entryZipPath = path.join(zipPath, entry.name)
+      if (entry.isDirectory()) {
+        core.debug(`Entering directory ${fullPath}...`)
+        addDirectoryToZip(fullPath, entryZipPath)
+      } else if (entry.isFile()) {
+        core.debug(`Adding file ${fullPath} as ${entryZipPath}...`)
+        zipfile.addFile(fullPath, entryZipPath, { compress: true })
+      }
+    }
+  }
 
   core.debug('Adding files to zip...')
-  archive.directory(_path, false)
+  addDirectoryToZip(workspacePath, assetName) // Use asset name as zip root folder
 
-  core.debug('Zip content: ' + JSON.stringify(buildTree(_path), null, 2))
+  core.debug(
+    'Zip content: ' + JSON.stringify(buildTree(workspacePath), null, 2)
+  )
+  zipfile.end()
 
-  await archive.finalize()
-  return path.resolve('cfx-portal-upload.zip')
+  const outputStream = fs.createWriteStream(outputZipPath)
+  return new Promise((resolve, reject) => {
+    zipfile.outputStream
+      .pipe(outputStream)
+      .on('close', () => {
+        console.log(`Asset zipped to ${outputZipPath}`)
+        resolve(path.resolve(outputZipPath))
+      })
+      .on('error', reject)
+  })
 }
 
 export function deleteIfExists(_path: string): void {

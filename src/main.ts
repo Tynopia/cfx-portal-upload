@@ -68,7 +68,7 @@ export async function run(): Promise<void> {
         assetId = await resolveAssetId(assetName, cookies)
       }
 
-      zipPath = await getZipPath(zipPath, makeZip)
+      zipPath = await getZipPath(assetName, zipPath, makeZip)
       await uploadZip(zipPath, assetId, chunkSize, cookies)
     } else {
       throw new Error(
@@ -178,12 +178,17 @@ async function getCookies(browser: Browser): Promise<string> {
 
 /**
  * Retrieves the zipPath or creates a zip based on the provided parameters.
+ * @param assetName - The name of the asset.
  * @param zipPath - The path to the zip file.
  * @param makeZip - Flag indicating whether to create a zip file.
  * @returns {Promise<string>} Resolves with the path to the zip file.
  * @throws If neither zipPath nor makeZip is provided, or if the pre-zip command fails.
  */
-async function getZipPath(zipPath: string, makeZip: boolean): Promise<string> {
+async function getZipPath(
+  assetName: string,
+  zipPath: string,
+  makeZip: boolean
+): Promise<string> {
   core.debug('Zip path: ' + JSON.stringify(zipPath))
   if (zipPath.length > 0) {
     core.debug('Using provided zip path.')
@@ -203,7 +208,7 @@ async function getZipPath(zipPath: string, makeZip: boolean): Promise<string> {
   deleteIfExists('.github/')
   deleteIfExists('.vscode/')
 
-  return zipAsset()
+  return zipAsset(assetName)
 }
 
 /**
