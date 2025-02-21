@@ -109,7 +109,7 @@ export async function zipAsset(assetName: string): Promise<string> {
   const outputZipPath = 'cfx-portal-upload.zip'
   const zipfile = new yazl.ZipFile()
 
-  function addDirectoryToZip(dir: string, zipPath: string) {
+  function addDirectoryToZip(dir: string, zipPath: string): void {
     const entries = fs.readdirSync(dir, { withFileTypes: true })
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name)
