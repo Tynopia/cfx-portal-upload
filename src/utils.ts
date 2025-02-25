@@ -106,7 +106,7 @@ export async function zipAsset(assetName: string): Promise<string> {
   core.debug('Zipping asset...')
 
   const workspacePath = getEnv('GITHUB_WORKSPACE')
-  const outputZipPath = assetName+'.zip'
+  const outputZipPath = assetName + '.zip'
   const zipfile = new yazl.ZipFile()
 
   function addDirectoryToZip(dir: string, zipPath: string): void {
