@@ -58,6 +58,27 @@ CFX provides API keys for this action.
 > `?` after the type indicates that the parameter is optional. if no assetName  
 > or assetId is provided, the repository name will be used as assetName.
 
+## Skip Upload
+
+If you haven't uploaded an asset in a long time, the cookie will become invalid
+due to inactivity. To prevent this, you can use a cron job to log in to the
+portal and refresh the cookie.
+
+```yaml
+name: Refresh Cookie
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  - name: Login to Portal
+    uses: Tynopia/cfx-portal-upload
+    with:
+      cookie: ${{ secrets.FORUM_COOKIE }}
+      skipUpload: true
+```
+
 ## How to Contribute
 
 If you want to contribute to this project, you can fork the repository and
