@@ -28,6 +28,9 @@ inputs:
   assetId:
     description: 'The asset id to re-upload'
     required: false
+  skipUpload:
+    description: 'Skip the upload and only go through the login process'
+    required: false
   chunkSize:
     description: 'The chunk size to split the file into'
     required: false
