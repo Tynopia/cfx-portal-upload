@@ -72,11 +72,15 @@ on:
     - cron: '0 0 * * *'
 
 jobs:
-  - name: Login to Portal
-    uses: Tynopia/cfx-portal-upload
-    with:
-      cookie: ${{ secrets.FORUM_COOKIE }}
-      skipUpload: true
+  refresh_cookie:
+    name: Login to Portal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run CFX Portal Upload
+        uses: Tynopia/cfx-portal-upload@main
+        with:
+          cookie: ${{ secrets.FORUM_COOKIE }}
+          skipUpload: true
 ```
 
 ## How to Contribute
