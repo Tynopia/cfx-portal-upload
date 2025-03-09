@@ -1,12 +1,21 @@
+import { Browser, getInstalledBrowsers, install } from '@puppeteer/browsers'
+import { SearchResponse, Urls } from './types'
+import { homedir } from 'os'
+import { join } from 'path'
+
 import * as core from '@actions/core'
 import axios from 'axios'
-import { SearchResponse, Urls } from './types'
 import fs from 'fs'
 import path from 'path'
 import yazl from 'yazl'
 
-import { Browser, getInstalledBrowsers, install } from '@puppeteer/browsers'
-const CACHE_DIR = '/home/runner/.cache/puppeteer'
+/**
+ * Get the cache directory for Puppeteer.
+ * @returns {string} The cache directory.
+ */
+function getCacheDirectory(): string {
+  return join(homedir(), '.cache', 'puppeteer')
+}
 
 /**
  * Prepare the Puppeteer environment by installing the necessary browser.
@@ -18,14 +27,15 @@ export async function preparePuppeteer(): Promise<void> {
     return
   }
 
+  const cacheDirectory = getCacheDirectory()
   const installed = await getInstalledBrowsers({
-    cacheDir: CACHE_DIR
+    cacheDir: cacheDirectory
   })
 
   if (!installed.some(browser => browser.browser === Browser.CHROME)) {
     core.info('Installing Chrome ...')
     await install({
-      cacheDir: CACHE_DIR,
+      cacheDir: cacheDirectory,
       browser: Browser.CHROME,
       buildId: '131.0.6778.108'
     })
