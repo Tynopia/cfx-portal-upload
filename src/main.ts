@@ -36,7 +36,8 @@ export async function run(): Promise<void> {
     const makeZip = core.getInput('makeZip').toLowerCase() === 'true'
     const skipUpload = core.getInput('skipUpload').toLowerCase() === 'true'
     const shouldDownload = core.getInput('download').toLowerCase() === 'true'
-    const downloadPath = core.getInput('downloadPath') || `asset-${assetId || 'download'}.zip`
+    const downloadPath =
+      core.getInput('downloadPath') || `asset-${assetId || 'download'}.zip`
 
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
@@ -364,7 +365,7 @@ async function waitForAssetReady(
   assetName?: string
 ): Promise<void> {
   const startTime = Date.now()
-  
+
   while (Date.now() - startTime < timeout) {
     let foundAsset: any = null
 
@@ -376,7 +377,10 @@ async function waitForAssetReady(
         )}&sort=asset.id&direction=desc`,
         { headers: { Cookie: cookies } }
       )
-      foundAsset = res.data.items.find((item: any) => String(item.id) === String(assetId) || item.name === assetName)
+      foundAsset = res.data.items.find(
+        (item: any) =>
+          String(item.id) === String(assetId) || item.name === assetName
+      )
     } else {
       // Iterate pages until the asset is found or no more items exist.
       let page = 1
@@ -387,7 +391,9 @@ async function waitForAssetReady(
         )
         const items = res.data.items
         if (!items || items.length === 0) break
-        foundAsset = items.find((item: any) => String(item.id) === String(assetId))
+        foundAsset = items.find(
+          (item: any) => String(item.id) === String(assetId)
+        )
         if (!foundAsset) {
           page++
         }
@@ -407,7 +413,9 @@ async function waitForAssetReady(
     }
     await new Promise(resolve => setTimeout(resolve, interval))
   }
-  throw new Error('Asset was not ready for download within the specified timeout.')
+  throw new Error(
+    'Asset was not ready for download within the specified timeout.'
+  )
 }
 
 /**
