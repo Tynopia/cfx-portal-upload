@@ -22,8 +22,18 @@ inputs:
     description: 'The maximum number of retries'
     required: false
     default: 3
+  uploadPath:
+    description:
+      'The path to the zip file or the folder (if makeZip is set to true) that
+      should be uploaded. This is the preferred parameter.'
+    required: false
   zipPath:
-    description: 'The path to the zip file to upload'
+    description:
+      'The legacy parameter for specifying the zip file path (deprecated: use
+      uploadPath instead).'
+    deprecationMessage:
+      'zipPath is deprecated and will be removed in a future release. Please use
+      uploadPath.'
     required: false
   assetId:
     description: 'The asset id to re-upload'
@@ -36,9 +46,9 @@ inputs:
     required: false
     default: 2097152
   downloadPath:
-    description:
-      'The local path where the asset will be downloaded. Defaults to
-      "asset-{assetId or download}.zip" if not provided'
+    description: |
+      The local path where the asset will be downloaded. Defaults to
+      "asset-{assetId or download}.zip" if not provided
     required: false
   download:
     description:

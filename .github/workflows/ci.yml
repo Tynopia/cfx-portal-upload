@@ -59,5 +59,5 @@ jobs:
         uses: ./
         with:
           cookie: ${{ secrets.FORUM_COOKIE }}
-          zipPath: ./test.zip
+          uploadPath: ./test.zip
           assetId: 489345
