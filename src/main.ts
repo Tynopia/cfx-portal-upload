@@ -420,8 +420,24 @@ async function waitForAssetReady(
       if (foundAsset.state === 'active') {
         core.info('Asset is ready for download.')
         return
+      } else if (foundAsset.state === 'invalid') {
+        const assetWithErrors = foundAsset as any
+        if (
+          assetWithErrors.errors &&
+          assetWithErrors.errors.general &&
+          assetWithErrors.errors.general.length > 0
+        ) {
+          const errorsArray = assetWithErrors.errors.general
+          const errorMsg = errorsArray.join(', ')
+          const errorLabel = errorsArray.length === 1 ? 'Error' : 'Errors'
+          throw new Error(`Asset upload failed. ${errorLabel}: ${errorMsg}`)
+        } else {
+          core.info(
+            'Asset state is "invalid", but no errors were found. Waiting...'
+          )
+        }
       } else {
-        core.info(`Asset state is '${foundAsset.state}'. Waiting...`)
+        throw new Error(`Asset state is '${foundAsset.state}'. Asset is not ready for download.`)
       }
     } else {
       core.info('Asset not found in response. Waiting...')
