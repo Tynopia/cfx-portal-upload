@@ -436,6 +436,8 @@ async function waitForAssetReady(
             'Asset state is "invalid", but no errors were found. Waiting...'
           )
         }
+      } else if (foundAsset.state === 'submitted') {
+        core.info('Asset has successfully been submitted. Waiting for asset to be active...')
       } else {
         throw new Error(`Asset state is '${foundAsset.state}'. Asset is not ready for download.`)
       }
