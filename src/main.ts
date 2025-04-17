@@ -2,8 +2,7 @@ import * as core from '@actions/core'
 import puppeteer, { Browser, Page } from 'puppeteer'
 import FormData from 'form-data'
 import axios from 'axios'
-
-import { createReadStream, statSync } from 'fs'
+import { createReadStream, statSync, createWriteStream } from 'fs'
 import { basename } from 'path'
 import { ReUploadResponse, SSOResponseBody } from './types'
 import {
@@ -14,6 +13,21 @@ import {
   preparePuppeteer,
   zipAsset
 } from './utils'
+import { Readable } from 'stream'
+
+interface Asset {
+  id: string
+  name: string
+  state: string
+}
+
+interface AssetResponse {
+  items: Asset[]
+}
+
+interface DownloadUrlResponse {
+  url: string
+}
 
 /**
  * The main function for the action.
@@ -33,9 +47,13 @@ export async function run(): Promise<void> {
     let assetId = core.getInput('assetId')
     let assetName = core.getInput('assetName')
 
-    let zipPath = core.getInput('zipPath')
+    let uploadPath =
+      core.getInput('uploadPath') || core.getInput('zipPath') || ''
     const makeZip = core.getInput('makeZip').toLowerCase() === 'true'
     const skipUpload = core.getInput('skipUpload').toLowerCase() === 'true'
+    const shouldDownload = core.getInput('download').toLowerCase() === 'true'
+    const downloadPath =
+      core.getInput('downloadPath') || `asset-${assetId || 'download'}.zip`
 
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
@@ -75,8 +93,13 @@ export async function run(): Promise<void> {
         assetId = await resolveAssetId(assetName, cookies)
       }
 
-      zipPath = await getZipPath(assetName, zipPath, makeZip)
-      await uploadZip(zipPath, assetId, chunkSize, cookies)
+      uploadPath = await getUploadPath(assetName, uploadPath, makeZip)
+      await uploadFile(uploadPath, assetId, chunkSize, cookies)
+
+      if (shouldDownload) {
+        await waitForAssetReady(assetId, cookies, 60000, 5000, assetName)
+        await downloadAsset(assetId, cookies, downloadPath)
+      }
     } else {
       throw new Error(
         'Redirect failed. Make sure the provided Cookie is valid.'
@@ -184,27 +207,27 @@ async function getCookies(browser: Browser): Promise<string> {
 }
 
 /**
- * Retrieves the zipPath or creates a zip based on the provided parameters.
+ * Retrieves the uploadPath or creates a zip based on the provided parameters.
  * @param assetName - The name of the asset.
- * @param zipPath - The path to the zip file.
+ * @param uploadPath - The path to the upload file.
  * @param makeZip - Flag indicating whether to create a zip file.
- * @returns {Promise<string>} Resolves with the path to the zip file.
- * @throws If neither zipPath nor makeZip is provided, or if the pre-zip command fails.
+ * @returns {Promise<string>} Resolves with the path to the upload file.
+ * @throws If neither uploadPath nor makeZip is provided, or if the pre-zip command fails.
  */
-async function getZipPath(
+async function getUploadPath(
   assetName: string,
-  zipPath: string,
+  uploadPath: string,
   makeZip: boolean
 ): Promise<string> {
-  core.debug('Zip path: ' + JSON.stringify(zipPath))
-  if (zipPath.length > 0) {
-    core.debug('Using provided zip path.')
-    return zipPath
+  core.debug('Upload path: ' + JSON.stringify(uploadPath))
+  if (uploadPath.length > 0) {
+    core.debug('Using provided upload path.')
+    return uploadPath
   }
 
-  if (!makeZip && zipPath.length == 0) {
+  if (!makeZip && uploadPath.length == 0) {
     throw new Error(
-      'Either zipPath or makeZip must be provided to upload a file.'
+      'Either uploadPath or makeZip must be provided to upload a file.'
     )
   }
 
@@ -220,7 +243,7 @@ async function getZipPath(
 
 /**
  * Starts the re-upload process by uploading the asset in chunks.
- * @param zipPath
+ * @param uploadPath
  * @param assetId
  * @param chunkSize
  * @param cookies
@@ -228,14 +251,14 @@ async function getZipPath(
  * @throws If the re-upload fails due to errors in the response.
  */
 async function startReupload(
-  zipPath: string,
+  uploadPath: string,
   assetId: string,
   chunkSize: number,
   cookies: string
 ): Promise<void> {
-  const stats = statSync(zipPath)
+  const stats = statSync(uploadPath)
   const totalSize = stats.size
-  const originalFileName = basename(zipPath)
+  const originalFileName = basename(uploadPath)
   const chunkCount = Math.ceil(totalSize / chunkSize)
 
   core.info('Starting upload ...')
@@ -270,29 +293,29 @@ async function startReupload(
 }
 
 /**
- * Uploads a zip file in chunks to the specified asset.
- * @param zipPath
+ * Uploads a file in chunks to the specified asset.
+ * @param uploadPath
  * @param assetId
- * @param chunkSize.
+ * @param chunkSize
  * @param cookies
  * @returns {Promise<void>} Resolves when the upload is complete.
  * @throws If the upload fails at any stage.
  */
-async function uploadZip(
-  zipPath: string,
+async function uploadFile(
+  uploadPath: string,
   assetId: string,
   chunkSize: number,
   cookies: string
 ): Promise<void> {
-  await startReupload(zipPath, assetId, chunkSize, cookies)
+  await startReupload(uploadPath, assetId, chunkSize, cookies)
 
   let chunkIndex = 0
 
-  const stats = statSync(zipPath)
+  const stats = statSync(uploadPath)
   const totalSize = stats.size
   const chunkCount = Math.ceil(totalSize / chunkSize)
 
-  const stream = createReadStream(zipPath, { highWaterMark: chunkSize })
+  const stream = createReadStream(uploadPath, { highWaterMark: chunkSize })
 
   for await (const chunk of stream) {
     const form = new FormData()
@@ -335,4 +358,141 @@ async function completeUpload(assetId: string, cookies: string): Promise<void> {
   )
 
   core.info('Upload completed.')
+}
+
+/**
+ * Polls the assets endpoint to check if the asset is ready.
+ * The asset is considered ready if its state is 'active'.
+ * If assetName is provided, it will use it as a search parameter.
+ * Otherwise, it will scan through pages until it finds the asset.
+ *
+ * @param assetId The asset id to search for.
+ * @param cookies Cookies for authentication.
+ * @param timeout Time in milliseconds to wait for the asset to become ready.
+ * @param interval Polling interval in milliseconds.
+ * @param assetName (Optional) The asset name to use in the search.
+ * @throws If the asset is not ready within the timeout period.
+ */
+async function waitForAssetReady(
+  assetId: string,
+  cookies: string,
+  timeout = 60000,
+  interval = 5000,
+  assetName?: string
+): Promise<void> {
+  const startTime = Date.now()
+
+  while (Date.now() - startTime < timeout) {
+    let foundAsset: Asset | null = null
+
+    if (assetName) {
+      const res = await axios.get<AssetResponse>(
+        `https://portal-api.cfx.re/v1/me/assets?page=1&search=${encodeURIComponent(
+          assetName
+        )}&sort=asset.id&direction=desc`,
+        { headers: { Cookie: cookies } }
+      )
+      foundAsset =
+        res.data.items.find(
+          (item: Asset) =>
+            String(item.id) === String(assetId) || item.name === assetName
+        ) || null
+    } else {
+      let page = 1
+      while (!foundAsset) {
+        const res = await axios.get<AssetResponse>(
+          `https://portal-api.cfx.re/v1/me/assets?page=${page}&search=&sort=asset.id&direction=desc`,
+          { headers: { Cookie: cookies } }
+        )
+        const items = res.data.items
+        if (!items || items.length === 0) break
+        foundAsset =
+          items.find((item: Asset) => String(item.id) === String(assetId)) ||
+          null
+        if (!foundAsset) {
+          page++
+        }
+      }
+    }
+
+    if (foundAsset) {
+      core.debug(`Asset state: ${foundAsset.state}`)
+      if (foundAsset.state === 'active') {
+        core.info('Asset is ready for download.')
+        return
+      } else if (foundAsset.state === 'invalid') {
+        const assetWithErrors = foundAsset as any
+        if (
+          assetWithErrors.errors &&
+          assetWithErrors.errors.general &&
+          assetWithErrors.errors.general.length > 0
+        ) {
+          const errorsArray = assetWithErrors.errors.general
+          const errorMsg = errorsArray.join(', ')
+          const errorLabel = errorsArray.length === 1 ? 'Error' : 'Errors'
+          throw new Error(`Asset upload failed. ${errorLabel}: ${errorMsg}`)
+        } else {
+          core.info(
+            'Asset state is "invalid", but no errors were found. Waiting...'
+          )
+        }
+      } else if (foundAsset.state === 'submitted') {
+        core.info('Asset has successfully been submitted. Waiting for asset to be active...')
+      } else {
+        throw new Error(`Asset state is '${foundAsset.state}'. Asset is not ready for download.`)
+      }
+    } else {
+      core.info('Asset not found in response. Waiting...')
+    }
+    await new Promise(resolve => setTimeout(resolve, interval))
+  }
+  throw new Error(
+    'Asset was not ready for download within the specified timeout.'
+  )
+}
+
+/**
+ * Downloads the asset file from the portal.
+ * @param assetId
+ * @param cookies
+ * @param downloadPath The file path where the asset will be saved.
+ * @returns {Promise<void>} Resolves when the download is complete.
+ */
+async function downloadAsset(
+  assetId: string,
+  cookies: string,
+  downloadPath: string
+): Promise<void> {
+  // First, get the real URL from the portal.
+  const portalDownloadUrl = `https://portal-api.cfx.re/v1/assets/${assetId}/download`
+  core.info(`Fetching download URL from ${portalDownloadUrl} ...`)
+
+  const initialResponse = await axios.get<DownloadUrlResponse>(
+    portalDownloadUrl,
+    {
+      headers: {
+        Cookie: cookies
+      },
+      responseType: 'json'
+    }
+  )
+
+  const realDownloadUrl: string = initialResponse.data.url
+  core.info(`Downloading asset from ${realDownloadUrl} ...`)
+
+  const response = await axios.get(realDownloadUrl, {
+    responseType: 'stream'
+  })
+
+  // Cast response.data to a Readable stream to satisfy the linter.
+  const readableStream = response.data as Readable
+  const writer = createWriteStream(downloadPath)
+  readableStream.pipe(writer)
+
+  await new Promise<void>((resolve, reject) => {
+    writer.on('finish', resolve)
+    writer.on('error', reject)
+  })
+
+  core.info(`Downloaded asset saved to ${downloadPath}`)
 }
