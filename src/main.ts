@@ -5,7 +5,7 @@ import axios from 'axios'
 
 import { createReadStream, statSync } from 'fs'
 import { basename } from 'path'
-import { ReUploadResponse, SSOResponseBody } from './types'
+import { UploadResponse, SSOResponseBody } from './types'
 import {
   deleteIfExists,
   resolveAssetId,
@@ -23,7 +23,7 @@ export async function run(): Promise<void> {
   await preparePuppeteer()
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: process.env.RUNNER_TEMP === undefined ? false : true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   })
 
@@ -36,6 +36,7 @@ export async function run(): Promise<void> {
     let zipPath = core.getInput('zipPath')
     const makeZip = core.getInput('makeZip').toLowerCase() === 'true'
     const skipUpload = core.getInput('skipUpload').toLowerCase() === 'true'
+    const createNew = core.getInput('createNew').toLowerCase() === 'true'
 
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
@@ -72,11 +73,11 @@ export async function run(): Promise<void> {
       const cookies = await getCookies(browser)
 
       if (assetName) {
-        assetId = await resolveAssetId(assetName, cookies)
+        assetId = await resolveAssetId(assetName, cookies, createNew)
       }
 
       zipPath = await getZipPath(assetName, zipPath, makeZip)
-      await uploadZip(zipPath, assetId, chunkSize, cookies)
+      await uploadZip(zipPath, assetName, assetId, chunkSize, cookies)
     } else {
       throw new Error(
         'Redirect failed. Make sure the provided Cookie is valid.'
@@ -219,20 +220,22 @@ async function getZipPath(
 }
 
 /**
- * Starts the re-upload process by uploading the asset in chunks.
+ * Starts the upload process by uploading the asset in chunks.
  * @param zipPath
+ * @param assetName
  * @param assetId
  * @param chunkSize
  * @param cookies
- * @returns {Promise<void>} Resolves when the re-upload process is initiated successfully.
- * @throws If the re-upload fails due to errors in the response.
+ * @returns {Promise<string>} Resolves when the re-upload process is initiated successfully. Returns the asset ID.
+ * @throws If the upload fails due to errors in the response.
  */
-async function startReupload(
+async function startUpload(
   zipPath: string,
+  assetName: string,
   assetId: string,
   chunkSize: number,
-  cookies: string
-): Promise<void> {
+  cookies: string,
+): Promise<string> {
   const stats = statSync(zipPath)
   const totalSize = stats.size
   const originalFileName = basename(zipPath)
@@ -241,16 +244,19 @@ async function startReupload(
   core.info('Starting upload ...')
 
   core.debug(`Total size: ${totalSize}`)
+  core.debug(`Asset name: ${assetName}`)
   core.debug(`Original file name: ${originalFileName}`)
   core.debug(`Chunk size: ${chunkSize}`)
   core.debug(`Chunk count: ${chunkCount}`)
 
-  const reUploadReponse = await axios.post<ReUploadResponse>(
-    getUrl('REUPLOAD', assetId),
+  const url = assetId === "asset_not_found" ? getUrl('NEW_ASSET') : getUrl('REUPLOAD', assetId)
+
+  const uploadResponse = await axios.post<UploadResponse>(
+    url,
     {
       chunk_count: chunkCount,
       chunk_size: chunkSize,
-      name: originalFileName,
+      name: assetName,
       original_file_name: originalFileName,
       total_size: totalSize
     },
@@ -261,17 +267,23 @@ async function startReupload(
     }
   )
 
-  if (reUploadReponse.data.errors !== null) {
-    core.debug(JSON.stringify(reUploadReponse.data.errors))
+  if (assetId === "asset_not_found") {
+    core.info('Asset not found, created new asset. Asset ID: ' + uploadResponse.data.asset_id)
+  }
+  
+  if (uploadResponse.data.errors !== null) {
+    core.debug(JSON.stringify(uploadResponse.data.errors))
     throw new Error(
-      'Failed to re-upload file. See debug logs for more information.'
+      'Failed to upload file. See debug logs for more information.'
     )
   }
+  return uploadResponse.data.asset_id.toString()
 }
 
 /**
  * Uploads a zip file in chunks to the specified asset.
  * @param zipPath
+ * @param assetName
  * @param assetId
  * @param chunkSize.
  * @param cookies
@@ -280,11 +292,12 @@ async function startReupload(
  */
 async function uploadZip(
   zipPath: string,
+  assetName: string,
   assetId: string,
   chunkSize: number,
   cookies: string
 ): Promise<void> {
-  await startReupload(zipPath, assetId, chunkSize, cookies)
+  assetId = await startUpload(zipPath, assetName, assetId, chunkSize, cookies)
 
   let chunkIndex = 0
 

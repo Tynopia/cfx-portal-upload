@@ -44,7 +44,8 @@ export async function preparePuppeteer(): Promise<void> {
 
 export async function resolveAssetId(
   name: string,
-  cookies: string
+  cookies: string,
+  createNew: boolean
 ): Promise<string> {
   core.debug(`Searching asset id for ${name}...`)
 
@@ -59,9 +60,13 @@ export async function resolveAssetId(
 
   if (search.data.items.length == 0) {
     core.debug(JSON.stringify(search.data))
-    throw new Error(
-      `Failed to find asset id for "${name}". See debug logs for more information.`
-    )
+    if (!createNew) {
+      throw new Error(
+        `Failed to find asset id for "${name}". See debug logs for more information.`
+      )
+    }
+    core.debug('No assets found, creating new asset...')
+    return "asset_not_found"
   }
 
   // Match the exact name
@@ -73,9 +78,13 @@ export async function resolveAssetId(
   }
 
   core.debug(JSON.stringify(search.data))
-  throw new Error(
+  if (!createNew) {
+    throw new Error(
     `Failed to find asset id for "${name}" exact match. See debug logs for more information.`
-  )
+    )
+  }
+  core.debug('No exact match found, creating new asset...')
+  return "asset_not_found"
 }
 
 export function getUrl(type: keyof typeof Urls, id?: string): string {
