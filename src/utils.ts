@@ -66,7 +66,7 @@ export async function resolveAssetId(
       )
     }
     core.debug('No assets found, creating new asset...')
-    return "asset_not_found"
+    return 'asset_not_found'
   }
 
   // Match the exact name
@@ -80,11 +80,11 @@ export async function resolveAssetId(
   core.debug(JSON.stringify(search.data))
   if (!createNew) {
     throw new Error(
-    `Failed to find asset id for "${name}" exact match. See debug logs for more information.`
+      `Failed to find asset id for "${name}" exact match. See debug logs for more information.`
     )
   }
   core.debug('No exact match found, creating new asset...')
-  return "asset_not_found"
+  return 'asset_not_found'
 }
 
 export function getUrl(type: keyof typeof Urls, id?: string): string {

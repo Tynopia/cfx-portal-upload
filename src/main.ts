@@ -234,7 +234,7 @@ async function startUpload(
   assetName: string,
   assetId: string,
   chunkSize: number,
-  cookies: string,
+  cookies: string
 ): Promise<string> {
   const stats = statSync(zipPath)
   const totalSize = stats.size
@@ -249,7 +249,10 @@ async function startUpload(
   core.debug(`Chunk size: ${chunkSize}`)
   core.debug(`Chunk count: ${chunkCount}`)
 
-  const url = assetId === "asset_not_found" ? getUrl('NEW_ASSET') : getUrl('REUPLOAD', assetId)
+  const url =
+    assetId === 'asset_not_found'
+      ? getUrl('NEW_ASSET')
+      : getUrl('REUPLOAD', assetId)
 
   const uploadResponse = await axios.post<UploadResponse>(
     url,
@@ -267,10 +270,13 @@ async function startUpload(
     }
   )
 
-  if (assetId === "asset_not_found") {
-    core.info('Asset not found, created new asset. Asset ID: ' + uploadResponse.data.asset_id)
+  if (assetId === 'asset_not_found') {
+    core.info(
+      'Asset not found, created new asset. Asset ID: ' +
+        uploadResponse.data.asset_id
+    )
   }
-  
+
   if (uploadResponse.data.errors !== null) {
     core.debug(JSON.stringify(uploadResponse.data.errors))
     throw new Error(
