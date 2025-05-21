@@ -49,14 +49,11 @@ export async function resolveAssetId(
 ): Promise<string> {
   core.debug(`Searching asset id for ${name}...`)
 
-  const search = await axios.get<SearchResponse>(
-    `https://portal-api.cfx.re/v1/me/assets?search=${name}&sort=asset.name&direction=asc`,
-    {
-      headers: {
-        Cookie: cookies
-      }
+  const search = await axios.get<SearchResponse>(getUrl('FIND_ASSET', name), {
+    headers: {
+      Cookie: cookies
     }
-  )
+  })
 
   if (search.data.items.length == 0) {
     core.debug(JSON.stringify(search.data))
