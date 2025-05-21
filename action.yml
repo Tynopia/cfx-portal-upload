@@ -35,6 +35,10 @@ inputs:
     description: 'The chunk size to split the file into'
     required: false
     default: 2097152
+  createNew:
+    description: 'Create a new asset if the asset is not found'
+    required: false
+    default: false
 
 runs:
   using: node20

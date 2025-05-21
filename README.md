@@ -52,6 +52,7 @@ CFX provides API keys for this action.
 | skipUpload | boolean? | Skip the upload and only log in to the portal                      | This will skip the asset upload to the portal and only go through the login process. Useful in cron jobs to prevent the cookie from getting invalidated due to inactivity            |
 | maxRetries | number?  | The maximum number of retries. (default: 3)                        | This is the maximum number of times the login will be retried if it fails.                                                                                                           |
 | chunkSize  | number?  | How large one chunk is for upload. Default: 2097152 bytes          |                                                                                                                                                                                      |
+| createNew  | boolean? | Create asset if not found. Default: false                          |                                                                                                                                                                                      |
 
 > [!NOTE]
 >
