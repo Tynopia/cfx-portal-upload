@@ -78,9 +78,19 @@ export async function resolveAssetId(
   )
 }
 
-export function getUrl(type: keyof typeof Urls, id?: string): string {
-  const url = Urls.API + Urls[type]
-  return id ? url.replace('{id}', id) : url
+export function getUrl(
+  type: keyof typeof Urls,
+  params?: Record<string, string | number>
+): string {
+  let url = Urls.API + Urls[type]
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url = url.replace(`{${key}}`, String(value))
+    }
+  }
+
+  return url
 }
 
 type TreeNode = string | Record<string, TreeNode[]> | null

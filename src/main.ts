@@ -224,7 +224,7 @@ async function getZipPath(
  * @param assetId
  * @param chunkSize
  * @param cookies
- * @returns {Promise<void>} Resolves when the re-upload process is initiated successfully.
+ * @returns {Promise<[number, number]>} Resolves when the re-upload process is initiated successfully.
  * @throws If the re-upload fails due to errors in the response.
  */
 async function startReupload(
@@ -232,7 +232,7 @@ async function startReupload(
   assetId: string,
   chunkSize: number,
   cookies: string
-): Promise<void> {
+): Promise<[number, number]> {
   const stats = statSync(zipPath)
   const totalSize = stats.size
   const originalFileName = basename(zipPath)
@@ -245,8 +245,8 @@ async function startReupload(
   core.debug(`Chunk size: ${chunkSize}`)
   core.debug(`Chunk count: ${chunkCount}`)
 
-  const reUploadReponse = await axios.post<ReUploadResponse>(
-    getUrl('REUPLOAD', assetId),
+  const reUploadResponse = await axios.post<ReUploadResponse>(
+    getUrl('REUPLOAD', { id: assetId }),
     {
       chunk_count: chunkCount,
       chunk_size: chunkSize,
@@ -261,12 +261,14 @@ async function startReupload(
     }
   )
 
-  if (reUploadReponse.data.errors !== null) {
-    core.debug(JSON.stringify(reUploadReponse.data.errors))
+  if (reUploadResponse.data.errors !== null) {
+    core.debug(JSON.stringify(reUploadResponse.data.errors))
     throw new Error(
       'Failed to re-upload file. See debug logs for more information.'
     )
   }
+
+  return [reUploadResponse.data.asset_id, reUploadResponse.data.version_id]
 }
 
 /**
@@ -284,7 +286,12 @@ async function uploadZip(
   chunkSize: number,
   cookies: string
 ): Promise<void> {
-  await startReupload(zipPath, assetId, chunkSize, cookies)
+  const [assetIdReupload, versionId] = await startReupload(
+    zipPath,
+    assetId,
+    chunkSize,
+    cookies
+  )
 
   let chunkIndex = 0
 
@@ -302,30 +309,39 @@ async function uploadZip(
       contentType: 'application/octet-stream'
     })
 
-    await axios.post(getUrl('UPLOAD_CHUNK', assetId), form, {
-      headers: {
-        ...form.getHeaders(),
-        Cookie: cookies
+    await axios.post(
+      getUrl('UPLOAD_CHUNK', { id: assetIdReupload, version_id: versionId }),
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          Cookie: cookies
+        }
       }
-    })
+    )
 
     core.info(`Uploaded chunk ${chunkIndex + 1}/${chunkCount}`)
 
     chunkIndex++
   }
 
-  await completeUpload(assetId, cookies)
+  await completeUpload(assetIdReupload, versionId, cookies)
 }
 
 /**
  * Completes the upload process.
  * @param assetId
+ * @param versionId
  * @param cookies
  * @returns {Promise<void>} Resolves when the upload is complete.
  */
-async function completeUpload(assetId: string, cookies: string): Promise<void> {
+async function completeUpload(
+  assetId: number,
+  versionId: number,
+  cookies: string
+): Promise<void> {
   await axios.post(
-    getUrl('COMPLETE_UPLOAD', assetId),
+    getUrl('COMPLETE_UPLOAD', { id: assetId, version_id: versionId }),
     {},
     {
       headers: {
