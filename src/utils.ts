@@ -245,6 +245,10 @@ export function getFxManifestVersion(): string {
   return match[1]
 }
 
+type CommitEvent = {
+  head_commit?: { message?: string }
+}
+
 /**
  * Gets the commit message that triggered the action.
  * @returns {string} The commit message.
@@ -253,13 +257,18 @@ export function getCommitMessage(): string {
   try {
     const eventPath = process.env.GITHUB_EVENT_PATH
     if (eventPath && fs.existsSync(eventPath)) {
-      const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf8'))
+      const eventData = JSON.parse(
+        fs.readFileSync(eventPath, 'utf8')
+      ) as CommitEvent
+
       if (eventData.head_commit && eventData.head_commit.message) {
         return eventData.head_commit.message
       }
     }
   } catch (error) {
-    core.debug(`Failed to get commit message from event payload: ${error}`)
+    const _error = error instanceof Error ? error.message : String(error)
+
+    core.debug(`Failed to get commit message from event payload: ${_error}`)
   }
 
   return 'No changelog provided'
@@ -270,7 +279,7 @@ export function getCommitMessage(): string {
  * @returns {string} The changelog string.
  */
 export function getChangelog(): string {
-  let changelog = core.getInput('changelog')
+  const changelog = core.getInput('changelog')
   if (changelog) {
     return changelog
   }

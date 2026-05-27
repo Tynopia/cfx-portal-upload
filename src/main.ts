@@ -16,7 +16,6 @@ import {
   validateFxManifest,
   isBetaAsset,
   getFxManifestVersion,
-  getCommitMessage,
   getChangelog,
   getAssetVersions,
   deleteAssetVersion
@@ -128,8 +127,13 @@ export async function run(): Promise<void> {
     }
   } catch (error) {
     if (error instanceof AxiosError) {
+      type ErrorData = {
+        message?: string
+        errors?: string
+      }
+
       const status = error.response?.status
-      const data = error.response?.data
+      const data = error.response?.data as ErrorData | undefined
       const message = error.message
 
       core.error(`API Request failed [${status}]: ${message}`)
