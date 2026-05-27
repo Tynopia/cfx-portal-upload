@@ -1,5 +1,5 @@
 import { Browser, getInstalledBrowsers, install } from '@puppeteer/browsers'
-import { SearchResponse, Urls } from './types'
+import { AssetDetail, SearchResponse, Urls } from './types'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -183,4 +183,158 @@ export function deleteIfExists(_path: string): void {
   } catch (error) {
     core.debug(`Skipping ${_path} deletion due to error: ${error as string}`)
   }
+}
+
+/**
+ * Validates that fxmanifest.lua exists and has a version tag.
+ * @throws If fxmanifest.lua is not found or does not have a version tag.
+ */
+export function validateFxManifest(): void {
+  const workspacePath = getEnv('GITHUB_WORKSPACE')
+  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
+
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error('fxmanifest.lua not found in the workspace.')
+  }
+
+  const content = fs.readFileSync(manifestPath, 'utf8')
+  const versionRegex = /^version\s+['"].*['"]/m
+  if (!versionRegex.test(content)) {
+    throw new Error("fxmanifest.lua does not have a `version '%s'` tag.")
+  }
+}
+
+/**
+ * Checks if fxmanifest.lua has a beta tag.
+ * @returns {boolean} True if the beta tag is found.
+ */
+export function isBetaAsset(): boolean {
+  const workspacePath = getEnv('GITHUB_WORKSPACE')
+  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
+
+  if (!fs.existsSync(manifestPath)) {
+    return false
+  }
+
+  const content = fs.readFileSync(manifestPath, 'utf8')
+  const betaRegex = /^beta\s+['"].*['"]/m
+  return betaRegex.test(content)
+}
+
+/**
+ * Extracts the version from fxmanifest.lua.
+ * @returns {string} The version string.
+ * @throws If fxmanifest.lua is not found or does not have a version tag.
+ */
+export function getFxManifestVersion(): string {
+  const workspacePath = getEnv('GITHUB_WORKSPACE')
+  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
+
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error('fxmanifest.lua not found in the workspace.')
+  }
+
+  const content = fs.readFileSync(manifestPath, 'utf8')
+  const versionRegex = /^version\s+['"](.*)['"]/m
+  const match = content.match(versionRegex)
+
+  if (!match || !match[1]) {
+    throw new Error("fxmanifest.lua does not have a `version '%s'` tag.")
+  }
+
+  return match[1]
+}
+
+/**
+ * Gets the commit message that triggered the action.
+ * @returns {string} The commit message.
+ */
+export function getCommitMessage(): string {
+  try {
+    const eventPath = process.env.GITHUB_EVENT_PATH
+    if (eventPath && fs.existsSync(eventPath)) {
+      const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf8'))
+      if (eventData.head_commit && eventData.head_commit.message) {
+        return eventData.head_commit.message
+      }
+    }
+  } catch (error) {
+    core.debug(`Failed to get commit message from event payload: ${error}`)
+  }
+
+  return 'No changelog provided'
+}
+
+/**
+ * Gets the changelog based on inputs or commit message.
+ * @returns {string} The changelog string.
+ */
+export function getChangelog(): string {
+  let changelog = core.getInput('changelog')
+  if (changelog) {
+    return changelog
+  }
+
+  const changelogFile = core.getInput('changelogFile')
+  if (changelogFile) {
+    const workspacePath = getEnv('GITHUB_WORKSPACE')
+    const fullPath = path.join(workspacePath, changelogFile)
+
+    if (fs.existsSync(fullPath)) {
+      return fs.readFileSync(fullPath, 'utf8')
+    }
+
+    core.warning(
+      `Changelog file not found at ${fullPath}. Falling back to commit message.`
+    )
+  }
+
+  return getCommitMessage()
+}
+
+/**
+ * Fetches all versions for a given asset.
+ * @param assetId The ID of the asset.
+ * @param cookies The authentication cookies.
+ * @returns {Promise<AssetVersion[]>} A list of asset versions.
+ */
+export async function getAssetVersions(
+  assetId: string,
+  cookies: string
+): Promise<AssetDetail['versions']> {
+  core.debug(`Fetching versions for asset ${assetId}...`)
+
+  const response = await axios.get<AssetDetail>(
+    getUrl('ASSET_DETAIL', { id: assetId }),
+    {
+      headers: {
+        Cookie: cookies
+      }
+    }
+  )
+
+  return response.data.versions
+}
+
+/**
+ * Placeholder for deleting an asset version.
+ * @param assetId The ID of the asset.
+ * @param versionId The ID of the version to delete.
+ * @param cookies The authentication cookies.
+ */
+export async function deleteAssetVersion(
+  assetId: string,
+  versionId: number,
+  cookies: string
+): Promise<void> {
+  core.info(`Deleting version ${versionId} of asset ${assetId}...`)
+
+  await axios.delete(
+    getUrl('DELETE_VERSION', { id: assetId, version_id: versionId }),
+    {
+      headers: {
+        Cookie: cookies
+      }
+    }
+  )
 }

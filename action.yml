@@ -28,6 +28,19 @@ inputs:
   assetId:
     description: 'The asset id to re-upload'
     required: false
+  beta:
+    description: 'Whether to upload as a release candidate'
+    required: false
+  changelog:
+    description: 'The changelog for the new version'
+    required: false
+  changelogFile:
+    description: 'The path to a file containing the changelog'
+    required: false
+  deleteOlderVersions:
+    description: 'Delete older versions of the asset after upload'
+    required: false
+    default: false
   skipUpload:
     description: 'Skip the upload and only go through the login process'
     required: false
