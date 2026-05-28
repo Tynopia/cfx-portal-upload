@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
@@ -21,30 +22,36 @@ import {
   zipAsset
 } from '../src/utils'
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
-  lstatSync: jest.fn(),
-  rmSync: jest.fn(),
-  unlinkSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  createWriteStream: jest.fn().mockReturnValue({
-    on: jest.fn().mockImplementation((event, cb) => {
-      if (event === 'close') cb()
-      return { on: jest.fn() }
-    })
-  }),
-  promises: {
-    access: jest.fn()
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual<typeof import('fs')>('fs')
+
+  return {
+    ...actualFs,
+    existsSync: jest.fn(),
+    readFileSync: jest.fn(),
+    lstatSync: jest.fn(),
+    rmSync: jest.fn(),
+    unlinkSync: jest.fn(),
+    statSync: jest.fn(),
+    readdirSync: jest.fn(),
+    createWriteStream: jest.fn().mockReturnValue({
+      on: jest
+        .fn()
+        .mockImplementation((event: string, cb: () => void): object => {
+          if (event === 'close') cb()
+          return { on: jest.fn() }
+        })
+    }),
+    promises: {
+      ...actualFs.promises,
+      access: jest.fn()
+    }
   }
-}))
+})
 jest.mock('axios')
 jest.mock('@actions/core')
 jest.mock('@puppeteer/browsers')
 jest.mock('yazl')
-jest.mock('path', () => jest.requireActual('path'))
 
 describe('utils', () => {
   const originalEnv = process.env
@@ -66,32 +73,46 @@ describe('utils', () => {
         end: jest.fn(),
         outputStream: {
           pipe: jest.fn().mockReturnValue({
-            on: jest.fn().mockImplementation((event, cb) => {
-              if (event === 'close') cb()
-              return { on: jest.fn().mockReturnValue({ on: jest.fn() }) }
-            })
+            on: jest
+              .fn()
+              .mockImplementation((event: string, cb: () => void): object => {
+                if (event === 'close') cb()
+                return { on: jest.fn().mockReturnValue({ on: jest.fn() }) }
+              })
           })
         }
       }
       ;(yazl.ZipFile as unknown as jest.Mock).mockReturnValue(mockZipFile)
-      ;(fs.readdirSync as jest.Mock).mockImplementation((p, options) => {
-        if (p === '/workspace') {
-          if (options && options.withFileTypes) {
-            return [
-              { name: 'file1.txt', isDirectory: () => false, isFile: () => true },
-              { name: 'subdir', isDirectory: () => true, isFile: () => false }
-            ]
+      ;(fs.readdirSync as jest.Mock).mockImplementation(
+        (p: string, options?: { withFileTypes?: boolean }) => {
+          if (p === '/workspace') {
+            if (options?.withFileTypes) {
+              return [
+                {
+                  name: 'file1.txt',
+                  isDirectory: () => false,
+                  isFile: () => true
+                },
+                { name: 'subdir', isDirectory: () => true, isFile: () => false }
+              ]
+            }
+            return ['file1.txt', 'subdir']
           }
-          return ['file1.txt', 'subdir']
-        }
-        if (p === path.join('/workspace', 'subdir')) {
-          if (options && options.withFileTypes) {
-            return [{ name: 'file2.txt', isDirectory: () => false, isFile: () => true }]
+          if (p === path.join('/workspace', 'subdir')) {
+            if (options?.withFileTypes) {
+              return [
+                {
+                  name: 'file2.txt',
+                  isDirectory: () => false,
+                  isFile: () => true
+                }
+              ]
+            }
+            return ['file2.txt']
           }
-          return ['file2.txt']
+          return []
         }
-        return []
-      })
+      )
       ;(fs.statSync as jest.Mock).mockImplementation(p => {
         if (p === '/workspace' || p === path.join('/workspace', 'subdir')) {
           return { isDirectory: () => true, isFile: () => false }
@@ -111,7 +132,7 @@ describe('utils', () => {
     it('should skip if RUNNER_TEMP is not set', async () => {
       delete process.env.RUNNER_TEMP
       await preparePuppeteer()
-      expect(core.info).toHaveBeenCalledWith(
+      expect(core.info as jest.Mock).toHaveBeenCalledWith(
         'Running locally, skipping Puppeteer setup ...'
       )
     })
@@ -152,7 +173,7 @@ describe('utils', () => {
       const versions = await getAssetVersions('123', 'cookie')
 
       expect(versions).toEqual(mockVersions)
-      expect(axios.get).toHaveBeenCalledWith(
+      expect(axios.get as jest.Mock).toHaveBeenCalledWith(
         expect.stringContaining('/assets/123'),
         expect.objectContaining({
           headers: { Cookie: 'cookie' }
@@ -165,7 +186,7 @@ describe('utils', () => {
     it('should delete version successfully', async () => {
       await deleteAssetVersion('123', 456, 'cookie')
 
-      expect(axios.delete).toHaveBeenCalledWith(
+      expect(axios.delete as jest.Mock).toHaveBeenCalledWith(
         expect.stringContaining('/assets/123/versions/456'),
         expect.objectContaining({
           headers: { Cookie: 'cookie' }

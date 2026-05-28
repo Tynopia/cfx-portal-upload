@@ -1,7 +1,7 @@
 import * as core from '@actions/core'
 import puppeteer, { Browser, Page } from 'puppeteer'
 import FormData from 'form-data'
-import axios, { AxiosError } from 'axios'
+import axios from 'axios'
 
 import { createReadStream, statSync } from 'fs'
 import { basename } from 'path'
@@ -126,7 +126,7 @@ export async function run(): Promise<void> {
       )
     }
   } catch (error) {
-    if (error instanceof AxiosError) {
+    if (axios.isAxiosError(error)) {
       type ErrorData = {
         message?: string
         errors?: string

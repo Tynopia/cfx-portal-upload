@@ -1,22 +1,41 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import * as core from '@actions/core'
 import * as main from '../src/main'
 import puppeteer from 'puppeteer'
 import * as utils from '../src/utils'
 import axios from 'axios'
+import * as fs from 'fs'
 
 jest.mock('@actions/core')
 jest.mock('puppeteer')
 jest.mock('../src/utils')
 jest.mock('axios')
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual('fs') as unknown as typeof import('fs')
+  return {
+    ...actualFs,
+    statSync: jest.fn(actualFs.statSync),
+    createReadStream: jest.fn(actualFs.createReadStream)
+  }
+})
 
 describe('main', () => {
   let getInputMock: jest.Mock
   let setFailedMock: jest.Mock
   let infoMock: jest.Mock
-  let debugMock: jest.Mock
 
-  let browserMock: any
-  let pageMock: any
+  let browserMock: {
+    newPage: jest.Mock
+    close: jest.Mock
+    setCookie: jest.Mock
+    cookies: jest.Mock
+  }
+  let pageMock: {
+    goto: jest.Mock
+    evaluate: jest.Mock
+    url: jest.Mock
+    close: jest.Mock
+  }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -24,7 +43,6 @@ describe('main', () => {
     getInputMock = core.getInput as jest.Mock
     setFailedMock = core.setFailed as jest.Mock
     infoMock = core.info as jest.Mock
-    debugMock = core.debug as jest.Mock
 
     pageMock = {
       goto: jest.fn(),
@@ -37,9 +55,10 @@ describe('main', () => {
       newPage: jest.fn().mockResolvedValue(pageMock),
       close: jest.fn(),
       setCookie: jest.fn(),
-      cookies: jest.fn().mockResolvedValue([{ name: '_t', value: 'test-cookie' }])
+      cookies: jest
+        .fn()
+        .mockResolvedValue([{ name: '_t', value: 'test-cookie' }])
     }
-
     ;(puppeteer.launch as jest.Mock).mockResolvedValue(browserMock)
 
     // Default inputs
@@ -61,7 +80,6 @@ describe('main', () => {
           return ''
       }
     })
-
     ;(utils.getUrl as jest.Mock).mockImplementation((type: string) => {
       if (type === 'SSO') return 'https://sso-url'
       return `https://api/${type}`
@@ -116,14 +134,14 @@ describe('main', () => {
     pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
     pageMock.url.mockReturnValue('https://portal.cfx.re')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
-
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: { asset_id: 123, version_id: 456, errors: null }
     })
 
     await main.run()
 
-    expect(axios.post).toHaveBeenCalledWith(
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(axios.post as jest.Mock).toHaveBeenCalledWith(
       expect.stringContaining('REUPLOAD'),
       expect.objectContaining({ release_candidate: true }),
       expect.anything()
@@ -163,23 +181,23 @@ describe('main', () => {
     })
 
     // Mock fs for uploadZip
-    const fs = require('fs')
-    jest.mock('fs', () => ({
-      ...jest.requireActual('fs'),
-      statSync: jest.fn().mockReturnValue({ size: 2048 }),
-      createReadStream: jest.fn().mockReturnValue({
-        [Symbol.asyncIterator]: async function* () {
-          yield Buffer.from('chunk1')
-          yield Buffer.from('chunk2')
-        }
-      })
-    }))
+    ;(fs.statSync as jest.Mock).mockReturnValue({ size: 2048 })
+    ;(fs.createReadStream as jest.Mock).mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        await Promise.resolve()
+        yield Buffer.from('chunk1')
+        yield Buffer.from('chunk2')
+      }
+    })
 
     await main.run()
 
     expect(utils.preparePuppeteer).toHaveBeenCalled()
-    expect(puppeteer.launch).toHaveBeenCalled()
-    expect(pageMock.goto).toHaveBeenCalledWith('https://sso-url', expect.anything())
+    expect(puppeteer.launch as jest.Mock).toHaveBeenCalled()
+    expect(pageMock.goto).toHaveBeenCalledWith(
+      'https://sso-url',
+      expect.anything()
+    )
     expect(infoMock).toHaveBeenCalledWith(
       'Redirected to CFX Portal. Uploading file ...'
     )
@@ -209,7 +227,6 @@ describe('main', () => {
     ;(utils.resolveAssetId as jest.Mock).mockResolvedValue('789')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
     ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
-
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: {
         asset_id: 789,
@@ -220,7 +237,10 @@ describe('main', () => {
 
     await main.run()
 
-    expect(utils.resolveAssetId).toHaveBeenCalledWith('my-asset', expect.anything())
+    expect(utils.resolveAssetId as jest.Mock).toHaveBeenCalledWith(
+      'my-asset',
+      expect.anything()
+    )
     expect(infoMock).toHaveBeenCalledWith(
       'Redirected to CFX Portal. Uploading file ...'
     )
@@ -245,7 +265,6 @@ describe('main', () => {
     pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
     pageMock.url.mockReturnValue('https://portal.cfx.re')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
-
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: { asset_id: 123, version_id: 456, errors: null }
     })
@@ -286,7 +305,6 @@ describe('main', () => {
     pageMock.url.mockReturnValue('https://portal.cfx.re')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
     ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
-
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: {
         asset_id: 123,
@@ -294,7 +312,6 @@ describe('main', () => {
         errors: null
       }
     })
-
     ;(utils.getAssetVersions as jest.Mock).mockResolvedValue([
       { id: 456, version: '1.0.0' },
       { id: 111, version: '0.9.0' }
@@ -303,8 +320,16 @@ describe('main', () => {
     await main.run()
 
     expect(infoMock).toHaveBeenCalledWith('Deleting older versions ...')
-    expect(utils.deleteAssetVersion).toHaveBeenCalledWith('123', 111, expect.anything())
-    expect(utils.deleteAssetVersion).not.toHaveBeenCalledWith('123', 456, expect.anything())
+    expect(utils.deleteAssetVersion).toHaveBeenCalledWith(
+      '123',
+      111,
+      expect.anything()
+    )
+    expect(utils.deleteAssetVersion).not.toHaveBeenCalledWith(
+      '123',
+      456,
+      expect.anything()
+    )
   })
 
   it('should skip upload if skipUpload is true', async () => {
@@ -330,23 +355,30 @@ describe('main', () => {
     getInputMock.mockImplementation((name: string) => {
       if (name === 'chunkSize') return '1024'
       if (name === 'maxRetries') return '1'
+      if (name === 'assetId') return '123'
+      if (name === 'zipPath') return 'test.zip'
       return ''
     })
 
     pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
     pageMock.url.mockReturnValue('https://portal.cfx.re')
-    
-    const axiosError = new Error('API Error') as any
-    axiosError.isAxiosError = true
+
+    const mockError = new Error('API Error')
+    const axiosError = mockError as unknown as {
+      response: { status: number; data: { message: string } }
+    }
     axiosError.response = {
       status: 500,
       data: { message: 'Internal Server Error' }
     }
-    
+    ;(axios.isAxiosError as unknown as jest.Mock).mockReturnValue(true)
     ;(axios.post as jest.Mock).mockRejectedValueOnce(axiosError)
-
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
 
     await main.run()
+
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('API Request failed [500]')
+    )
   })
 })

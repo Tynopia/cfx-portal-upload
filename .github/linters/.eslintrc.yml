@@ -41,6 +41,7 @@ rules:
     'import/no-namespace': 'off',
     'no-console': 'off',
     'semi': 'off',
+    'no-extra-semi': 'off',
     '@typescript-eslint/array-type': 'error',
     '@typescript-eslint/consistent-type-assertions': 'error',
     '@typescript-eslint/explicit-member-accessibility':
