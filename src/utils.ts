@@ -157,7 +157,7 @@ export async function zipAsset(assetName: string): Promise<string> {
     zipfile.outputStream
       .pipe(outputStream)
       .on('close', () => {
-        console.log(`Asset zipped to ${outputZipPath}`)
+        core.info(`Asset zipped to ${outputZipPath}`)
         resolve(path.resolve(outputZipPath))
       })
       .on('error', reject)
