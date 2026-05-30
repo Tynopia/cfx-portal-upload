@@ -8,6 +8,82 @@ import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
 import yazl from 'yazl'
+import yauzl from 'yauzl'
+
+const fileCache: Record<string, string> = {}
+
+/**
+ * Clears the file cache. Used for testing.
+ */
+export function clearFileCache(): void {
+  for (const key in fileCache) {
+    delete fileCache[key]
+  }
+}
+
+import { Entry } from 'yauzl'
+
+async function readFileFromZip(
+  zipPath: string,
+  filePath: string
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+      if (err) return reject(err)
+      zipfile.readEntry()
+
+      zipfile.on('entry', (entry: Entry) => {
+        if (entry.fileName !== filePath) {
+          zipfile.readEntry()
+          return
+        }
+
+        zipfile.openReadStream(entry, (err, stream) => {
+          if (err) return reject(err)
+
+          let content = ''
+          stream.on('data', chunk => {
+            content += chunk
+          })
+          stream.on('end', () => {
+            resolve(content)
+          })
+        })
+      })
+
+      zipfile.on('end', () => {
+        reject(new Error(`File ${filePath} not found in zip`))
+      })
+    })
+  })
+}
+
+export async function getCachedFileContent(
+  filePath: string,
+  zipPath?: string
+): Promise<string> {
+  if (fileCache[filePath]) {
+    return fileCache[filePath]
+  }
+
+  let content: string
+
+  if (zipPath && fs.existsSync(zipPath)) {
+    content = await readFileFromZip(zipPath, filePath)
+  } else {
+    const workspacePath = getEnv('GITHUB_WORKSPACE')
+    const fullPath = path.join(workspacePath, filePath)
+
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`File ${filePath} not found`)
+    }
+
+    content = fs.readFileSync(fullPath, 'utf8')
+  }
+
+  fileCache[filePath] = content
+  return content
+}
 
 /**
  * Get the cache directory for Puppeteer.
@@ -186,39 +262,18 @@ export function deleteIfExists(_path: string): void {
 }
 
 /**
- * Validates that fxmanifest.lua exists and has a version tag.
- * @throws If fxmanifest.lua is not found or does not have a version tag.
- */
-export function validateFxManifest(): void {
-  const workspacePath = getEnv('GITHUB_WORKSPACE')
-  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
-
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error('fxmanifest.lua not found in the workspace.')
-  }
-
-  const content = fs.readFileSync(manifestPath, 'utf8')
-  const versionRegex = /^version\s+['"].*['"]/m
-  if (!versionRegex.test(content)) {
-    throw new Error("fxmanifest.lua does not have a `version '%s'` tag.")
-  }
-}
-
-/**
  * Checks if fxmanifest.lua has a beta tag.
  * @returns {boolean} True if the beta tag is found.
  */
-export function isBetaAsset(): boolean {
-  const workspacePath = getEnv('GITHUB_WORKSPACE')
-  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
+export async function isBetaAsset(zipPath?: string): Promise<boolean> {
+  try {
+    const content = await getCachedFileContent('fxmanifest.lua', zipPath)
+    const betaRegex = /^beta\s+['"].*['"]/m
 
-  if (!fs.existsSync(manifestPath)) {
+    return betaRegex.test(content)
+  } catch {
     return false
   }
-
-  const content = fs.readFileSync(manifestPath, 'utf8')
-  const betaRegex = /^beta\s+['"].*['"]/m
-  return betaRegex.test(content)
 }
 
 /**
@@ -226,20 +281,14 @@ export function isBetaAsset(): boolean {
  * @returns {string} The version string.
  * @throws If fxmanifest.lua is not found or does not have a version tag.
  */
-export function getFxManifestVersion(): string {
-  const workspacePath = getEnv('GITHUB_WORKSPACE')
-  const manifestPath = path.join(workspacePath, 'fxmanifest.lua')
-
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error('fxmanifest.lua not found in the workspace.')
-  }
-
-  const content = fs.readFileSync(manifestPath, 'utf8')
+export async function getFxManifestVersion(zipPath?: string): Promise<string> {
+  const content = await getCachedFileContent('fxmanifest.lua', zipPath)
   const versionRegex = /^version\s+['"](.*)['"]/m
+
   const match = content.match(versionRegex)
 
   if (!match || !match[1]) {
-    throw new Error("fxmanifest.lua does not have a `version '%s'` tag.")
+    throw new Error("fxmanifest.lua does not have a `version '...'` tag.")
   }
 
   return match[1]
@@ -278,7 +327,7 @@ export function getCommitMessage(): string {
  * Gets the changelog based on inputs or commit message.
  * @returns {string} The changelog string.
  */
-export function getChangelog(): string {
+export async function getChangelog(zipPath?: string): Promise<string> {
   const changelog = core.getInput('changelog')
   if (changelog) {
     return changelog
@@ -286,16 +335,13 @@ export function getChangelog(): string {
 
   const changelogFile = core.getInput('changelogFile')
   if (changelogFile) {
-    const workspacePath = getEnv('GITHUB_WORKSPACE')
-    const fullPath = path.join(workspacePath, changelogFile)
-
-    if (fs.existsSync(fullPath)) {
-      return fs.readFileSync(fullPath, 'utf8')
+    try {
+      return await getCachedFileContent(changelogFile, zipPath)
+    } catch {
+      core.warning(
+        `Changelog file not found at ${changelogFile}. Falling back to commit message.`
+      )
     }
-
-    core.warning(
-      `Changelog file not found at ${fullPath}. Falling back to commit message.`
-    )
   }
 
   return getCommitMessage()

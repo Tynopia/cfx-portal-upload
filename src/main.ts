@@ -13,7 +13,6 @@ import {
   getUrl,
   preparePuppeteer,
   zipAsset,
-  validateFxManifest,
   isBetaAsset,
   getFxManifestVersion,
   getChangelog,
@@ -56,10 +55,10 @@ export async function run(): Promise<void> {
     } else if (betaInput === 'false') {
       beta = false
     } else {
-      beta = isBetaAsset()
+      beta = await isBetaAsset(zipPath)
     }
 
-    const changelog = getChangelog()
+    const changelog = await getChangelog(zipPath)
 
     if (isNaN(chunkSize)) {
       throw new Error('Invalid chunk size. Must be a number.')
@@ -76,7 +75,7 @@ export async function run(): Promise<void> {
       assetName = basename(getEnv('GITHUB_WORKSPACE'))
     }
 
-    validateFxManifest()
+    const version = await getFxManifestVersion(zipPath)
 
     const redirectUrl = await getRedirectUrl(page, maxRetries)
     await setForumCookie(browser, page)
@@ -97,8 +96,6 @@ export async function run(): Promise<void> {
       if (assetName) {
         assetId = await resolveAssetId(assetName, cookies)
       }
-
-      const version = getFxManifestVersion()
 
       zipPath = await getZipPath(assetName, zipPath, makeZip)
       const uploadedVersionId = await uploadZip(
