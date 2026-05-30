@@ -42,16 +42,26 @@ CFX provides API keys for this action.
 
 ## Input Parameters
 
-| Key        | Type     | Value                                                              | Description                                                                                                                                                                          |
-| ---------- | -------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| cookie     | string   | The Forum Cookie to authenticate                                   | Go to [forum.cfx.re](https://forum.cfx.re) and inspect the page with your browser's dev tools. Then search for the `_t` cookie.                                                      |
-| makeZip    | boolean? | Automatically ZIP the full repository to upload it (default: true) | This will remove the folders `.git/`/`.github/`/`.vscode/` from the repository before zipping.                                                                                       |
-| assetName  | string   | The asset name to re-upload                                        | This is the name of the asset you want to re-upload.                                                                                                                                 |
-| assetId    | number   | The Asset ID, which is a unique ID in the portal                   | The Asset ID can be found at [portal.cfx.re](https://portal.cfx.re/assets/created-assets). ![image](https://github.com/user-attachments/assets/4176b7e7-cfbb-4e14-a488-04c4301f6082) |
-| zipPath    | string?  | The path to your ZIP file that should be uploaded                  | This is the file location of your packed ZIP file inside the Workflow Container, usually stored in `/home/...`.                                                                      |
-| skipUpload | boolean? | Skip the upload and only log in to the portal                      | This will skip the asset upload to the portal and only go through the login process. Useful in cron jobs to prevent the cookie from getting invalidated due to inactivity            |
-| maxRetries | number?  | The maximum number of retries. (default: 3)                        | This is the maximum number of times the login will be retried if it fails.                                                                                                           |
-| chunkSize  | number?  | How large one chunk is for upload. Default: 2097152 bytes          |                                                                                                                                                                                      |
+| Key                 | Type     | Value                                                              | Description                                                                                                                                                                          |
+| ------------------- | -------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| cookie              | string   | The Forum Cookie to authenticate                                   | Go to [forum.cfx.re](https://forum.cfx.re) and inspect the page with your browser's dev tools. Then search for the `_t` cookie.                                                      |
+| makeZip             | boolean? | Automatically ZIP the full repository to upload it (default: true) | This will remove the folders `.git/`/`.github/`/`.vscode/` from the repository before zipping.                                                                                       |
+| assetName           | string   | The asset name to re-upload                                        | This is the name of the asset you want to re-upload.                                                                                                                                 |
+| assetId             | number   | The Asset ID, which is a unique ID in the portal                   | The Asset ID can be found at [portal.cfx.re](https://portal.cfx.re/assets/created-assets). ![image](https://github.com/user-attachments/assets/4176b7e7-cfbb-4e14-a488-04c4301f6082) |
+| beta                | boolean? | Whether to upload as a release candidate                           | If not provided, it will search for a `beta "*"` tag in `fxmanifest.lua`.                                                                                                            |
+| changelog           | string?  | The changelog for the new version                                  | If not provided, it will check `changelogFile` or the commit message.                                                                                                                |
+| changelogFile       | string?  | Path to a file containing the changelog                            | If provided and `changelog` is empty, the content of this file will be used.                                                                                                         |
+| deleteOlderVersions | boolean? | Delete older versions after successful upload (default: false)     | This will fetch all versions of the asset and delete all except the one just uploaded.                                                                                               |
+
+| zipPath | string? | The path to your ZIP file that should be uploaded | This
+is the file location of your packed ZIP file inside the Workflow Container,
+usually stored in `/home/...`. | | skipUpload | boolean? | Skip the upload and
+only log in to the portal | This will skip the asset upload to the portal and
+only go through the login process. Useful in cron jobs to prevent the cookie
+from getting invalidated due to inactivity | | maxRetries | number? | The
+maximum number of retries. (default: 3) | This is the maximum number of times
+the login will be retried if it fails. | | chunkSize | number? | How large one
+chunk is for upload. Default: 2097152 bytes | |
 
 > [!NOTE]
 >
