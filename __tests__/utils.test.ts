@@ -4,14 +4,16 @@ import * as path from 'path'
 import axios from 'axios'
 import * as core from '@actions/core'
 import yazl from 'yazl'
+import yauzl from 'yauzl'
 import { install, getInstalledBrowsers, Browser } from '@puppeteer/browsers'
 import { Urls } from '../src/types'
 import {
   getUrl,
   getEnv,
-  validateFxManifest,
   isBetaAsset,
   getFxManifestVersion,
+  getCachedFileContent,
+  clearFileCache,
   resolveAssetId,
   getCommitMessage,
   getChangelog,
@@ -52,6 +54,7 @@ jest.mock('axios')
 jest.mock('@actions/core')
 jest.mock('@puppeteer/browsers')
 jest.mock('yazl')
+jest.mock('yauzl')
 
 describe('utils', () => {
   const originalEnv = process.env
@@ -59,11 +62,55 @@ describe('utils', () => {
   beforeEach(() => {
     jest.resetAllMocks()
     process.env = { ...originalEnv }
+    clearFileCache()
   })
 
   afterAll(() => {
     process.env = originalEnv
   })
+
+  const setupZipMock = (fileName: string, content: string): void => {
+    const mockStream = {
+      on: jest
+        .fn()
+        .mockImplementation((event: string, cb: (data?: string) => void) => {
+          if (event === 'data') cb(content)
+          if (event === 'end') cb()
+          return mockStream
+        })
+    }
+    const mockZipFile = {
+      readEntry: jest.fn(),
+      on: jest
+        .fn()
+        .mockImplementation(
+          (event: string, cb: (entry?: { fileName: string }) => void) => {
+            if (event === 'entry') cb({ fileName })
+            return mockZipFile
+          }
+        ),
+      openReadStream: jest
+        .fn()
+        .mockImplementation(
+          (
+            entry: { fileName: string },
+            cb: (err: Error | null, stream: typeof mockStream) => void
+          ) => {
+            cb(null, mockStream)
+          }
+        )
+    }
+    ;(yauzl.open as unknown as jest.Mock).mockImplementation(
+      (
+        _path: string,
+        _options: object,
+        cb: (err: Error | null, zip: typeof mockZipFile) => void
+      ) => {
+        cb(null, mockZipFile)
+      }
+    )
+    ;(fs.existsSync as jest.Mock).mockReturnValue(true)
+  }
 
   describe('zipAsset', () => {
     it('should create a zip file successfully', async () => {
@@ -125,6 +172,44 @@ describe('utils', () => {
       expect(zipPath).toContain('my-asset.zip')
       expect(mockZipFile.addFile).toHaveBeenCalledTimes(2)
       expect(mockZipFile.end).toHaveBeenCalled()
+    })
+  })
+
+  describe('getCachedFileContent', () => {
+    it('should return cached content if available', async () => {
+      process.env.GITHUB_WORKSPACE = '/workspace'
+      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
+      ;(fs.readFileSync as jest.Mock).mockReturnValue('content1')
+
+      // Use a unique filename to avoid cache collision with other tests if needed
+      const content = await getCachedFileContent('file-cached.txt')
+      expect(content).toBe('content1')
+
+      // Second call should use cache (even if we change readFileSync return)
+      ;(fs.readFileSync as jest.Mock).mockReturnValue('content2')
+      const contentCached = await getCachedFileContent('file-cached.txt')
+      expect(contentCached).toBe('content1')
+    })
+
+    it('should read from zip if zipPath is provided and exists', async () => {
+      setupZipMock('file-in-zip.txt', 'zip-content')
+
+      const content = await getCachedFileContent('file-in-zip.txt', 'test.zip')
+      expect(content).toBe('zip-content')
+      expect(yauzl.open).toHaveBeenCalledWith(
+        'test.zip',
+        { lazyEntries: true },
+        expect.any(Function)
+      )
+    })
+
+    it('should throw error if file not found locally', async () => {
+      process.env.GITHUB_WORKSPACE = '/workspace'
+      ;(fs.existsSync as jest.Mock).mockReturnValue(false)
+
+      await expect(getCachedFileContent('missing.txt')).rejects.toThrow(
+        'File missing.txt not found'
+      )
     })
   })
 
@@ -221,79 +306,67 @@ describe('utils', () => {
     })
   })
 
-  describe('validateFxManifest', () => {
-    it('should throw error if fxmanifest.lua not found', () => {
+  describe('isBetaAsset', () => {
+    it('should return false if fxmanifest.lua not found', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(false)
 
-      expect(() => validateFxManifest()).toThrow(
-        'fxmanifest.lua not found in the workspace.'
-      )
+      await expect(isBetaAsset()).resolves.toBe(false)
     })
 
-    it('should throw error if version tag is missing', () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('fx_version "cerulean"')
-
-      expect(() => validateFxManifest()).toThrow(
-        "fxmanifest.lua does not have a `version '%s'` tag."
-      )
-    })
-
-    it('should not throw error if version tag is present', () => {
+    it('should return true if beta tag is present', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
       ;(fs.readFileSync as jest.Mock).mockReturnValue(
-        "fx_version 'cerulean'\nversion '1.0.0'"
+        "version '1.0.0'\nbeta 'true'"
       )
 
-      expect(() => validateFxManifest()).not.toThrow()
-    })
-  })
-
-  describe('isBetaAsset', () => {
-    it('should return false if fxmanifest.lua not found', () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(false)
-
-      expect(isBetaAsset()).toBe(false)
+      await expect(isBetaAsset()).resolves.toBe(true)
     })
 
-    it('should return true if beta tag is present', () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue("beta 'true'")
-
-      expect(isBetaAsset()).toBe(true)
-    })
-
-    it('should return false if beta tag is missing', () => {
+    it('should return false if beta tag is missing', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
       ;(fs.readFileSync as jest.Mock).mockReturnValue("version '1.0.0'")
 
-      expect(isBetaAsset()).toBe(false)
+      await expect(isBetaAsset()).resolves.toBe(false)
+    })
+
+    it('should read from zip if zipPath is provided', async () => {
+      setupZipMock('fxmanifest.lua', "beta 'true'")
+
+      await expect(isBetaAsset('test.zip')).resolves.toBe(true)
+      expect(yauzl.open).toHaveBeenCalledWith(
+        'test.zip',
+        { lazyEntries: true },
+        expect.any(Function)
+      )
     })
   })
 
   describe('getFxManifestVersion', () => {
-    it('should return version string', () => {
+    it('should return version string', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
       ;(fs.readFileSync as jest.Mock).mockReturnValue("version '1.2.3'")
 
-      expect(getFxManifestVersion()).toBe('1.2.3')
+      await expect(getFxManifestVersion()).resolves.toBe('1.2.3')
     })
 
-    it('should throw error if version tag is missing', () => {
+    it('should throw error if version tag is missing', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
       ;(fs.readFileSync as jest.Mock).mockReturnValue('')
 
-      expect(() => getFxManifestVersion()).toThrow(
-        "fxmanifest.lua does not have a `version '%s'` tag."
+      await expect(getFxManifestVersion()).rejects.toThrow(
+        "fxmanifest.lua does not have a `version '...'` tag."
       )
+    })
+
+    it('should read from zip if zipPath is provided', async () => {
+      setupZipMock('fxmanifest.lua', "version '2.0.0'")
+
+      await expect(getFxManifestVersion('test.zip')).resolves.toBe('2.0.0')
     })
   })
 
@@ -366,12 +439,12 @@ describe('utils', () => {
   })
 
   describe('getChangelog', () => {
-    it('should return input changelog if provided', () => {
+    it('should return input changelog if provided', async () => {
       ;(core.getInput as jest.Mock).mockReturnValue('manual changelog')
-      expect(getChangelog()).toBe('manual changelog')
+      await expect(getChangelog()).resolves.toBe('manual changelog')
     })
 
-    it('should return content from changelogFile if provided', () => {
+    it('should return content from changelogFile if provided', async () => {
       ;(core.getInput as jest.Mock).mockImplementation(name => {
         if (name === 'changelog') return ''
         if (name === 'changelogFile') return 'CHANGELOG.md'
@@ -381,7 +454,19 @@ describe('utils', () => {
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
       ;(fs.readFileSync as jest.Mock).mockReturnValue('file content')
 
-      expect(getChangelog()).toBe('file content')
+      await expect(getChangelog()).resolves.toBe('file content')
+    })
+
+    it('should read changelog from zip if zipPath is provided', async () => {
+      ;(core.getInput as jest.Mock).mockImplementation(name => {
+        if (name === 'changelog') return ''
+        if (name === 'changelogFile') return 'CHANGELOG.md'
+        return ''
+      })
+
+      setupZipMock('CHANGELOG.md', 'zip-changelog')
+
+      await expect(getChangelog('test.zip')).resolves.toBe('zip-changelog')
     })
   })
 
