@@ -9,6 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import yazl from 'yazl'
 import yauzl from 'yauzl'
+import { Entry } from 'yauzl'
 
 const fileCache: Record<string, string> = {}
 
@@ -21,30 +22,48 @@ export function clearFileCache(): void {
   }
 }
 
-import { Entry } from 'yauzl'
-
 async function readFileFromZip(
   zipPath: string,
-  filePath: string
+  filePath: string,
+  allowOneLevelDeeper = false
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    core.debug(`Opening zip ${zipPath}..., looking for file ${filePath}`)
+
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
       if (err) return reject(err)
+
+      const normalizedTarget = filePath.replace(/\\/g, '/')
+
       zipfile.readEntry()
 
       zipfile.on('entry', (entry: Entry) => {
-        if (entry.fileName !== filePath) {
+        core.debug(`Entry: ${entry.fileName}`)
+
+        const matchesDirectly = entry.fileName === normalizedTarget
+
+        const matchesOneLevelDeeper =
+          allowOneLevelDeeper &&
+          entry.fileName.endsWith(`/${normalizedTarget}`) &&
+          entry.fileName.split('/').length ===
+            normalizedTarget.split('/').length + 1
+
+        if (!matchesDirectly && !matchesOneLevelDeeper) {
           zipfile.readEntry()
           return
         }
+
+        core.debug(`Reading file ${entry.fileName} from zip...`)
 
         zipfile.openReadStream(entry, (err, stream) => {
           if (err) return reject(err)
 
           let content = ''
+
           stream.on('data', chunk => {
             content += chunk
           })
+
           stream.on('end', () => {
             resolve(content)
           })
@@ -60,7 +79,8 @@ async function readFileFromZip(
 
 export async function getCachedFileContent(
   filePath: string,
-  zipPath?: string
+  zipPath?: string,
+  allowOneLevelDeeper = false
 ): Promise<string> {
   if (fileCache[filePath]) {
     return fileCache[filePath]
@@ -69,10 +89,29 @@ export async function getCachedFileContent(
   let content: string
 
   if (zipPath && fs.existsSync(zipPath)) {
-    content = await readFileFromZip(zipPath, filePath)
+    content = await readFileFromZip(zipPath, filePath, allowOneLevelDeeper)
   } else {
     const workspacePath = getEnv('GITHUB_WORKSPACE')
-    const fullPath = path.join(workspacePath, filePath)
+
+    let fullPath = path.join(workspacePath, filePath)
+
+    if (!fs.existsSync(fullPath) && allowOneLevelDeeper) {
+      const parentDir = path.dirname(fullPath)
+      const fileName = path.basename(fullPath)
+
+      const subdirs = fs
+        .readdirSync(parentDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+
+      for (const dir of subdirs) {
+        const candidate = path.join(parentDir, dir.name, fileName)
+
+        if (fs.existsSync(candidate)) {
+          fullPath = candidate
+          break
+        }
+      }
+    }
 
     if (!fs.existsSync(fullPath)) {
       throw new Error(`File ${filePath} not found`)
@@ -267,7 +306,7 @@ export function deleteIfExists(_path: string): void {
  */
 export async function isBetaAsset(zipPath?: string): Promise<boolean> {
   try {
-    const content = await getCachedFileContent('fxmanifest.lua', zipPath)
+    const content = await getCachedFileContent('fxmanifest.lua', zipPath, true)
     const betaRegex = /^beta\s+['"].*['"]/m
 
     return betaRegex.test(content)
@@ -282,7 +321,7 @@ export async function isBetaAsset(zipPath?: string): Promise<boolean> {
  * @throws If fxmanifest.lua is not found or does not have a version tag.
  */
 export async function getFxManifestVersion(zipPath?: string): Promise<string> {
-  const content = await getCachedFileContent('fxmanifest.lua', zipPath)
+  const content = await getCachedFileContent('fxmanifest.lua', zipPath, true)
   const versionRegex = /^version\s+['"](.*)['"]/m
 
   const match = content.match(versionRegex)

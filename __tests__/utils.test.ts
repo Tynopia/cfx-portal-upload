@@ -203,6 +203,47 @@ describe('utils', () => {
       )
     })
 
+    it('should find file one level deeper in zip if allowOneLevelDeeper is true', async () => {
+      setupZipMock('subdir/file-in-zip.txt', 'zip-content-deeper')
+
+      const content = await getCachedFileContent(
+        'file-in-zip.txt',
+        'test.zip',
+        true
+      )
+      expect(content).toBe('zip-content-deeper')
+    })
+
+    it('should find file one level deeper locally if allowOneLevelDeeper is true', async () => {
+      const workspacePath = path.resolve('/workspace')
+      process.env.GITHUB_WORKSPACE = workspacePath
+      const filePath = 'file.txt'
+      const fullPath = path.join(workspacePath, filePath)
+      const deeperPath = path.join(workspacePath, 'subdir', filePath)
+
+      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+        if (p === fullPath) return false
+        if (p === deeperPath) return true
+        return false
+      })
+      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
+        if (path.resolve(p) === workspacePath) {
+          return [
+            {
+              name: 'subdir',
+              isDirectory: () => true
+            }
+          ]
+        }
+        return []
+      })
+      ;(fs.readFileSync as jest.Mock).mockReturnValue('deeper-content')
+
+      const content = await getCachedFileContent(filePath, undefined, true)
+      expect(content).toBe('deeper-content')
+      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
+    })
+
     it('should throw error if file not found locally', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(false)
@@ -324,6 +365,28 @@ describe('utils', () => {
       await expect(isBetaAsset()).resolves.toBe(true)
     })
 
+    it('should find fxmanifest.lua one level deeper locally', async () => {
+      const workspacePath = path.resolve('/workspace')
+      process.env.GITHUB_WORKSPACE = workspacePath
+      const deeperPath = path.join(workspacePath, 'subdir', 'fxmanifest.lua')
+
+      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+        if (p === path.join(workspacePath, 'fxmanifest.lua')) return false
+        if (p === deeperPath) return true
+        return false
+      })
+      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
+        if (path.resolve(p) === workspacePath) {
+          return [{ name: 'subdir', isDirectory: () => true }]
+        }
+        return []
+      })
+      ;(fs.readFileSync as jest.Mock).mockReturnValue("beta 'true'")
+
+      await expect(isBetaAsset()).resolves.toBe(true)
+      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
+    })
+
     it('should return false if beta tag is missing', async () => {
       process.env.GITHUB_WORKSPACE = '/workspace'
       ;(fs.existsSync as jest.Mock).mockReturnValue(true)
@@ -342,6 +405,12 @@ describe('utils', () => {
         expect.any(Function)
       )
     })
+
+    it('should read from zip one level deeper', async () => {
+      setupZipMock('subdir/fxmanifest.lua', "beta 'true'")
+
+      await expect(isBetaAsset('test.zip')).resolves.toBe(true)
+    })
   })
 
   describe('getFxManifestVersion', () => {
@@ -351,6 +420,28 @@ describe('utils', () => {
       ;(fs.readFileSync as jest.Mock).mockReturnValue("version '1.2.3'")
 
       await expect(getFxManifestVersion()).resolves.toBe('1.2.3')
+    })
+
+    it('should find fxmanifest.lua one level deeper locally', async () => {
+      const workspacePath = path.resolve('/workspace')
+      process.env.GITHUB_WORKSPACE = workspacePath
+      const deeperPath = path.join(workspacePath, 'subdir', 'fxmanifest.lua')
+
+      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+        if (p === path.join(workspacePath, 'fxmanifest.lua')) return false
+        if (p === deeperPath) return true
+        return false
+      })
+      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
+        if (path.resolve(p) === workspacePath) {
+          return [{ name: 'subdir', isDirectory: () => true }]
+        }
+        return []
+      })
+      ;(fs.readFileSync as jest.Mock).mockReturnValue("version '2.3.4'")
+
+      await expect(getFxManifestVersion()).resolves.toBe('2.3.4')
+      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
     })
 
     it('should throw error if version tag is missing', async () => {
@@ -367,6 +458,12 @@ describe('utils', () => {
       setupZipMock('fxmanifest.lua', "version '2.0.0'")
 
       await expect(getFxManifestVersion('test.zip')).resolves.toBe('2.0.0')
+    })
+
+    it('should read from zip one level deeper', async () => {
+      setupZipMock('subdir/fxmanifest.lua', "version '3.0.0'")
+
+      await expect(getFxManifestVersion('test.zip')).resolves.toBe('3.0.0')
     })
   })
 
