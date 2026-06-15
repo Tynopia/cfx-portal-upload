@@ -47,6 +47,14 @@ export async function run(): Promise<void> {
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
 
+    if (isNaN(chunkSize)) {
+      throw new Error('Invalid chunk size. Must be a number.')
+    }
+
+    if (isNaN(maxRetries)) {
+      throw new Error('Invalid max retries. Must be a number.')
+    }
+
     if (skipUpload) {
       await loginToPortal(browser, page, maxRetries)
       core.info('Skipping upload...')
@@ -66,67 +74,42 @@ export async function run(): Promise<void> {
 
     const changelog = await getChangelog(zipPath)
 
-    if (isNaN(chunkSize)) {
-      throw new Error('Invalid chunk size. Must be a number.')
-    }
-
-    if (isNaN(maxRetries)) {
-      throw new Error('Invalid max retries. Must be a number.')
-    }
-
     // No asset id or name provided, using the repository name
-    // If skipUpload is true, we don't need to update the asset name
-    if (!assetId && !assetName && !skipUpload) {
+    if (!assetId && !assetName) {
       core.debug('No asset id or name provided, using repository name...')
       assetName = basename(getEnv('GITHUB_WORKSPACE'))
     }
 
     const version = await getFxManifestVersion(zipPath)
 
-    const redirectUrl = await getRedirectUrl(page, maxRetries)
-    await setForumCookie(browser, page)
+    await loginToPortal(browser, page, maxRetries)
 
-    await page.goto(redirectUrl, {
-      waitUntil: 'networkidle0'
-    })
+    core.info('Redirected to CFX Portal. Uploading file ...')
+    const cookies = await getCookies(browser)
 
-    if (page.url().includes('portal.cfx.re')) {
-      if (skipUpload) {
-        core.info('Redirected to CFX Portal. Skipping upload ...')
-        return
-      }
+    if (assetName) {
+      assetId = await resolveAssetId(assetName, cookies)
+    }
 
-      core.info('Redirected to CFX Portal. Uploading file ...')
-      const cookies = await getCookies(browser)
+    zipPath = await getZipPath(assetName, zipPath, makeZip)
+    const uploadedVersionId = await uploadZip(
+      zipPath,
+      assetId,
+      chunkSize,
+      cookies,
+      beta,
+      version,
+      changelog
+    )
 
-      if (assetName) {
-        assetId = await resolveAssetId(assetName, cookies)
-      }
-
-      zipPath = await getZipPath(assetName, zipPath, makeZip)
-      const uploadedVersionId = await uploadZip(
-        zipPath,
-        assetId,
-        chunkSize,
-        cookies,
-        beta,
-        version,
-        changelog
-      )
-
-      if (deleteOlderVersions) {
-        core.info('Deleting older versions ...')
-        const versions = await getAssetVersions(assetId, cookies)
-        for (const v of versions) {
-          if (v.id !== uploadedVersionId) {
-            await deleteAssetVersion(assetId, v.id, cookies)
-          }
+    if (deleteOlderVersions) {
+      core.info('Deleting older versions ...')
+      const versions = await getAssetVersions(assetId, cookies)
+      for (const v of versions) {
+        if (v.id !== uploadedVersionId) {
+          await deleteAssetVersion(assetId, v.id, cookies)
         }
       }
-    } else {
-      throw new Error(
-        'Redirect failed. Make sure the provided Cookie is valid.'
-      )
     }
   } catch (error) {
     if (axios.isAxiosError(error)) {
