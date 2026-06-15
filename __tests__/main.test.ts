@@ -345,9 +345,8 @@ describe('main', () => {
 
     await main.run()
 
-    expect(infoMock).toHaveBeenCalledWith(
-      'Redirected to CFX Portal. Skipping upload ...'
-    )
+    expect(infoMock).toHaveBeenCalledWith('Redirected to CFX Portal.')
+    expect(infoMock).toHaveBeenCalledWith('Skipping upload...')
     expect(axios.post).not.toHaveBeenCalled()
   })
 

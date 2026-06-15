@@ -296147,6 +296147,17 @@ async function run() {
         const deleteOlderVersions = core.getInput('deleteOlderVersions').toLowerCase() === 'true';
         const chunkSize = parseInt(core.getInput('chunkSize'));
         const maxRetries = parseInt(core.getInput('maxRetries'));
+        if (isNaN(chunkSize)) {
+            throw new Error('Invalid chunk size. Must be a number.');
+        }
+        if (isNaN(maxRetries)) {
+            throw new Error('Invalid max retries. Must be a number.');
+        }
+        if (skipUpload) {
+            await loginToPortal(browser, page, maxRetries);
+            core.info('Skipping upload...');
+            return;
+        }
         const betaInput = core.getInput('beta').toLowerCase();
         let beta = false;
         if (betaInput === 'true') {
@@ -296159,48 +296170,28 @@ async function run() {
             beta = await (0, utils_1.isBetaAsset)(zipPath);
         }
         const changelog = await (0, utils_1.getChangelog)(zipPath);
-        if (isNaN(chunkSize)) {
-            throw new Error('Invalid chunk size. Must be a number.');
-        }
-        if (isNaN(maxRetries)) {
-            throw new Error('Invalid max retries. Must be a number.');
-        }
         // No asset id or name provided, using the repository name
-        // If skipUpload is true, we don't need to update the asset name
-        if (!assetId && !assetName && !skipUpload) {
+        if (!assetId && !assetName) {
             core.debug('No asset id or name provided, using repository name...');
             assetName = (0, path_1.basename)((0, utils_1.getEnv)('GITHUB_WORKSPACE'));
         }
         const version = await (0, utils_1.getFxManifestVersion)(zipPath);
-        const redirectUrl = await getRedirectUrl(page, maxRetries);
-        await setForumCookie(browser, page);
-        await page.goto(redirectUrl, {
-            waitUntil: 'networkidle0'
-        });
-        if (page.url().includes('portal.cfx.re')) {
-            if (skipUpload) {
-                core.info('Redirected to CFX Portal. Skipping upload ...');
-                return;
-            }
-            core.info('Redirected to CFX Portal. Uploading file ...');
-            const cookies = await getCookies(browser);
-            if (assetName) {
-                assetId = await (0, utils_1.resolveAssetId)(assetName, cookies);
-            }
-            zipPath = await getZipPath(assetName, zipPath, makeZip);
-            const uploadedVersionId = await uploadZip(zipPath, assetId, chunkSize, cookies, beta, version, changelog);
-            if (deleteOlderVersions) {
-                core.info('Deleting older versions ...');
-                const versions = await (0, utils_1.getAssetVersions)(assetId, cookies);
-                for (const v of versions) {
-                    if (v.id !== uploadedVersionId) {
-                        await (0, utils_1.deleteAssetVersion)(assetId, v.id, cookies);
-                    }
+        await loginToPortal(browser, page, maxRetries);
+        core.info('Redirected to CFX Portal. Uploading file ...');
+        const cookies = await getCookies(browser);
+        if (assetName) {
+            assetId = await (0, utils_1.resolveAssetId)(assetName, cookies);
+        }
+        zipPath = await getZipPath(assetName, zipPath, makeZip);
+        const uploadedVersionId = await uploadZip(zipPath, assetId, chunkSize, cookies, beta, version, changelog);
+        if (deleteOlderVersions) {
+            core.info('Deleting older versions ...');
+            const versions = await (0, utils_1.getAssetVersions)(assetId, cookies);
+            for (const v of versions) {
+                if (v.id !== uploadedVersionId) {
+                    await (0, utils_1.deleteAssetVersion)(assetId, v.id, cookies);
                 }
             }
-        }
-        else {
-            throw new Error('Redirect failed. Make sure the provided Cookie is valid.');
         }
     }
     catch (error) {
@@ -296221,6 +296212,26 @@ async function run() {
     finally {
         await browser.close();
     }
+}
+/**
+ * Logs in to the CFX Portal and waits for the page to load.
+ * If the login fails, it will retry up to `maxRetries` times.
+ * @param browser
+ * @param page
+ * @param maxRetries
+ * @throws If the login fails after `maxRetries` attempts.
+ */
+async function loginToPortal(browser, page, maxRetries) {
+    const redirectUrl = await getRedirectUrl(page, maxRetries);
+    await setForumCookie(browser, page);
+    await page.goto(redirectUrl, {
+        waitUntil: 'networkidle0'
+    });
+    if (page.url().includes('portal.cfx.re')) {
+        core.info('Redirected to CFX Portal.');
+        return;
+    }
+    throw new Error('Redirect failed. Make sure the provided Cookie is valid.');
 }
 /**
  * Navigates to the SSO URL and waits for the page to load.
