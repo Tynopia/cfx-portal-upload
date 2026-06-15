@@ -47,6 +47,12 @@ export async function run(): Promise<void> {
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
 
+    if (skipUpload) {
+      await loginToPortal(browser, page, maxRetries)
+      core.info('Skipping upload...')
+      return
+    }
+
     const betaInput = core.getInput('beta').toLowerCase()
     let beta = false
 
@@ -147,6 +153,34 @@ export async function run(): Promise<void> {
   } finally {
     await browser.close()
   }
+}
+
+/**
+ * Logs in to the CFX Portal and waits for the page to load.
+ * If the login fails, it will retry up to `maxRetries` times.
+ * @param browser
+ * @param page
+ * @param maxRetries
+ * @throws If the login fails after `maxRetries` attempts.
+ */
+async function loginToPortal(
+  browser: Browser,
+  page: Page,
+  maxRetries: number
+): Promise<void> {
+  const redirectUrl = await getRedirectUrl(page, maxRetries)
+  await setForumCookie(browser, page)
+
+  await page.goto(redirectUrl, {
+    waitUntil: 'networkidle0'
+  })
+
+  if (page.url().includes('portal.cfx.re')) {
+    core.info('Redirected to CFX Portal.')
+    return
+  }
+
+  throw new Error('Redirect failed. Make sure the provided Cookie is valid.')
 }
 
 /**
