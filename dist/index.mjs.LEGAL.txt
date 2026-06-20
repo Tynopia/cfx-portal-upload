@@ -1,0 +1,257 @@
+Bundled license information:
+
+undici/lib/fetch/body.js:
+  /*! formdata-polyfill. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
+
+undici/lib/websocket/frame.js:
+  /*! ws. MIT License. Einar Otto Stangvik <einaros@gmail.com> */
+
+puppeteer-core/lib/puppeteer/util/disposable.js:
+puppeteer-core/lib/puppeteer/api/ElementHandleSymbol.js:
+puppeteer-core/lib/puppeteer/util/Function.js:
+puppeteer-core/lib/puppeteer/common/HandleIterator.js:
+puppeteer-core/lib/puppeteer/common/QueryHandler.js:
+puppeteer-core/lib/puppeteer/common/CSSQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/CustomQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/PierceQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/PQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/PSelectorParser.js:
+puppeteer-core/lib/puppeteer/common/TextQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/XPathQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/GetQueryHandler.js:
+puppeteer-core/lib/puppeteer/util/decorators.js:
+puppeteer-core/lib/puppeteer/api/JSHandle.js:
+puppeteer-core/lib/puppeteer/api/ElementHandle.js:
+puppeteer-core/lib/puppeteer/api/Frame.js:
+puppeteer-core/lib/puppeteer/api/HTTPResponse.js:
+puppeteer-core/lib/puppeteer/api/Realm.js:
+puppeteer-core/lib/puppeteer/api/Target.js:
+puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:
+puppeteer-core/lib/puppeteer/cdp/FrameManagerEvents.js:
+puppeteer-core/lib/puppeteer/cdp/cdp.js:
+puppeteer-core/lib/puppeteer/bidi/BidiOverCdp.js:
+puppeteer-core/lib/puppeteer/bidi/Deserializer.js:
+puppeteer-core/lib/puppeteer/bidi/JSHandle.js:
+puppeteer-core/lib/puppeteer/bidi/ElementHandle.js:
+puppeteer-core/lib/puppeteer/bidi/ExposedFunction.js:
+puppeteer-core/lib/puppeteer/bidi/Serializer.js:
+puppeteer-core/lib/puppeteer/bidi/util.js:
+puppeteer-core/lib/puppeteer/bidi/Frame.js:
+puppeteer-core/lib/puppeteer/bidi/Target.js:
+puppeteer-core/lib/puppeteer/bidi/BrowserConnector.js:
+@puppeteer/browsers/lib/browser-data/types.js:
+@puppeteer/browsers/lib/httpUtil.js:
+@puppeteer/browsers/lib/browser-data/chrome.js:
+@puppeteer/browsers/lib/browser-data/chrome-headless-shell.js:
+@puppeteer/browsers/lib/browser-data/chromedriver.js:
+@puppeteer/browsers/lib/browser-data/chromium.js:
+@puppeteer/browsers/lib/browser-data/firefox.js:
+@puppeteer/browsers/lib/browser-data/browser-data.js:
+@puppeteer/browsers/lib/debug.js:
+@puppeteer/browsers/lib/detectPlatform.js:
+@puppeteer/browsers/lib/Cache.js:
+@puppeteer/browsers/lib/launch.js:
+@puppeteer/browsers/lib/fileUtil.js:
+@puppeteer/browsers/lib/CLI.js:
+@puppeteer/browsers/lib/main.js:
+puppeteer-core/lib/puppeteer/common/BrowserConnector.js:
+puppeteer-core/lib/puppeteer/node/util/fs.js:
+puppeteer-core/lib/puppeteer/node/ChromeLauncher.js:
+puppeteer-core/lib/puppeteer/node/FirefoxLauncher.js:
+puppeteer-core/lib/puppeteer/node/ScreenRecorder.js:
+puppeteer/lib/puppeteer/getConfiguration.js:
+  /**
+   * @license
+   * Copyright 2023 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/environment.js:
+puppeteer-core/lib/puppeteer/util/assert.js:
+puppeteer-core/lib/puppeteer/common/Debug.js:
+puppeteer-core/lib/puppeteer/common/PDFOptions.js:
+puppeteer-core/lib/puppeteer/common/AriaQueryHandler.js:
+puppeteer-core/lib/puppeteer/common/ConsoleMessage.js:
+puppeteer-core/lib/puppeteer/common/FileChooser.js:
+puppeteer-core/lib/puppeteer/common/SecurityDetails.js:
+puppeteer-core/lib/puppeteer/cdp/BrowserConnector.js:
+puppeteer-core/lib/puppeteer/node/LaunchOptions.js:
+puppeteer-core/lib/puppeteer/common/TaskQueue.js:
+puppeteer-core/lib/puppeteer/revisions.js:
+puppeteer-core/lib/puppeteer/node/PuppeteerNode.js:
+  /**
+   * @license
+   * Copyright 2020 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/util/encoding.js:
+puppeteer-core/lib/puppeteer/util/Deferred.js:
+puppeteer-core/lib/puppeteer/util/Mutex.js:
+puppeteer-core/lib/puppeteer/common/ScriptInjector.js:
+puppeteer-core/lib/puppeteer/util/incremental-id-generator.js:
+puppeteer-core/lib/puppeteer/cdp/Binding.js:
+puppeteer-core/lib/puppeteer/cdp/CdpPreloadScript.js:
+puppeteer-core/lib/puppeteer/cdp/BrowserContext.js:
+puppeteer-core/lib/puppeteer/cdp/TargetManageEvents.js:
+puppeteer-core/lib/puppeteer/bidi/core/Navigation.js:
+puppeteer-core/lib/puppeteer/bidi/core/Realm.js:
+puppeteer-core/lib/puppeteer/bidi/core/Request.js:
+puppeteer-core/lib/puppeteer/bidi/core/UserPrompt.js:
+puppeteer-core/lib/puppeteer/bidi/core/BrowsingContext.js:
+puppeteer-core/lib/puppeteer/bidi/core/UserContext.js:
+puppeteer-core/lib/puppeteer/bidi/WebWorker.js:
+puppeteer-core/lib/puppeteer/bidi/core/Browser.js:
+puppeteer-core/lib/puppeteer/bidi/core/Session.js:
+  /**
+   * @license
+   * Copyright 2024 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/util/version.js:
+puppeteer-core/lib/puppeteer/api/DeviceRequestPrompt.js:
+puppeteer-core/lib/puppeteer/util/httpUtils.js:
+puppeteer-core/lib/puppeteer/bidi/BluetoothEmulation.js:
+puppeteer-core/lib/puppeteer/bidi/DeviceRequestPrompt.js:
+  /**
+   * @license
+   * Copyright 2025 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/common/Errors.js:
+puppeteer-core/lib/puppeteer/api/WebWorker.js:
+puppeteer-core/lib/puppeteer/cdp/Accessibility.js:
+puppeteer-core/lib/puppeteer/node/NodeWebSocketTransport.js:
+  /**
+   * @license
+   * Copyright 2018 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/common/util.js:
+puppeteer-core/lib/puppeteer/api/BrowserContext.js:
+puppeteer-core/lib/puppeteer/api/Dialog.js:
+puppeteer-core/lib/puppeteer/api/Input.js:
+puppeteer-core/lib/puppeteer/api/Page.js:
+puppeteer-core/lib/puppeteer/cdp/CdpSession.js:
+puppeteer-core/lib/puppeteer/cdp/Connection.js:
+puppeteer-core/lib/puppeteer/cdp/Coverage.js:
+puppeteer-core/lib/puppeteer/cdp/Dialog.js:
+puppeteer-core/lib/puppeteer/cdp/utils.js:
+puppeteer-core/lib/puppeteer/cdp/ExecutionContext.js:
+puppeteer-core/lib/puppeteer/cdp/Frame.js:
+puppeteer-core/lib/puppeteer/cdp/NetworkManager.js:
+puppeteer-core/lib/puppeteer/cdp/FrameManager.js:
+puppeteer-core/lib/puppeteer/common/USKeyboardLayout.js:
+puppeteer-core/lib/puppeteer/cdp/Input.js:
+puppeteer-core/lib/puppeteer/cdp/Page.js:
+puppeteer-core/lib/puppeteer/cdp/Browser.js:
+puppeteer-core/lib/puppeteer/common/Device.js:
+puppeteer-core/lib/puppeteer/bidi/Connection.js:
+puppeteer-core/lib/puppeteer/bidi/Dialog.js:
+puppeteer-core/lib/puppeteer/bidi/Input.js:
+@puppeteer/browsers/lib/install.js:
+puppeteer-core/lib/puppeteer/common/Puppeteer.js:
+puppeteer-core/lib/puppeteer/index-browser.js:
+puppeteer-core/lib/puppeteer/node/BrowserLauncher.js:
+puppeteer-core/lib/puppeteer/index.js:
+puppeteer-core/lib/puppeteer/puppeteer-core.js:
+puppeteer/lib/puppeteer/puppeteer.js:
+  /**
+   * @license
+   * Copyright 2017 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/common/EventEmitter.js:
+puppeteer-core/lib/puppeteer/util/ErrorLike.js:
+puppeteer-core/lib/puppeteer/common/LazyArg.js:
+puppeteer-core/lib/puppeteer/common/WaitTask.js:
+puppeteer-core/lib/puppeteer/api/api.js:
+puppeteer-core/lib/puppeteer/common/NetworkManagerEvents.js:
+puppeteer-core/lib/puppeteer/cdp/DeviceRequestPrompt.js:
+puppeteer-core/lib/puppeteer/cdp/IsolatedWorlds.js:
+puppeteer-core/lib/puppeteer/cdp/FrameTree.js:
+puppeteer-core/lib/puppeteer/cdp/NetworkEventManager.js:
+puppeteer-core/lib/puppeteer/cdp/TargetManager.js:
+puppeteer-core/lib/puppeteer/bidi/Page.js:
+puppeteer-core/lib/puppeteer/bidi/BrowserContext.js:
+puppeteer-core/lib/puppeteer/bidi/Browser.js:
+puppeteer-core/lib/puppeteer/bidi/bidi.js:
+puppeteer-core/lib/puppeteer/common/common.js:
+puppeteer-core/lib/puppeteer/util/util.js:
+puppeteer-core/lib/puppeteer/node/node.js:
+  /**
+   * @license
+   * Copyright 2022 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/api/Extension.js:
+puppeteer-core/lib/puppeteer/cdp/CdpIssue.js:
+puppeteer-core/lib/puppeteer/cdp/WebMCP.js:
+@puppeteer/browsers/lib/DefaultProvider.js:
+@puppeteer/browsers/lib/ProgressBar.js:
+@puppeteer/browsers/lib/provider.js:
+  /**
+   * @license
+   * Copyright 2026 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/common/TimeoutSettings.js:
+puppeteer-core/lib/puppeteer/cdp/JSHandle.js:
+puppeteer-core/lib/puppeteer/cdp/ElementHandle.js:
+puppeteer-core/lib/puppeteer/cdp/IsolatedWorld.js:
+puppeteer-core/lib/puppeteer/cdp/LifecycleWatcher.js:
+puppeteer-core/lib/puppeteer/cdp/Target.js:
+  /**
+   * @license
+   * Copyright 2019 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+puppeteer-core/lib/puppeteer/cdp/PredefinedNetworkConditions.js:
+  /**
+   * @license
+   * Copyright 2021 Google Inc.
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+yargs-parser/build/lib/string-utils.js:
+yargs-parser/build/lib/tokenize-arg-string.js:
+yargs-parser/build/lib/yargs-parser-types.js:
+yargs-parser/build/lib/yargs-parser.js:
+  /**
+   * @license
+   * Copyright (c) 2016, Contributors
+   * SPDX-License-Identifier: ISC
+   */
+
+yargs-parser/build/lib/index.js:
+  /**
+   * @fileoverview Main entrypoint for libraries using yargs-parser in Node.js
+   * CJS and ESM environments.
+   *
+   * @license
+   * Copyright (c) 2016, Contributors
+   * SPDX-License-Identifier: ISC
+   */
+
+mime-db/index.js:
+  /*!
+   * mime-db
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2015-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+
+mime-types/index.js:
+  /*!
+   * mime-types
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   */

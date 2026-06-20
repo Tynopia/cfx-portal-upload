@@ -1,11 +1,12 @@
 import * as core from '@actions/core'
-import puppeteer, { Browser, Page } from 'puppeteer'
+import puppeteer from 'puppeteer'
+import type { Browser, Page } from 'puppeteer'
 import FormData from 'form-data'
 import axios from 'axios'
 
 import { createReadStream, statSync } from 'fs'
 import { basename } from 'path'
-import { ReUploadResponse, SSOResponseBody } from './types'
+import { ReUploadResponse, SSOResponseBody } from './types.js'
 import {
   deleteIfExists,
   resolveAssetId,
@@ -18,23 +19,26 @@ import {
   getChangelog,
   getAssetVersions,
   deleteAssetVersion
-} from './utils'
+} from './utils.js'
 
 /**
  * The main function for the action.
  * @returns {Promise<void>} Resolves when the action is complete.
  */
 export async function run(): Promise<void> {
-  await preparePuppeteer()
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  })
-
-  const page = await browser.newPage()
+  let browser: Browser | undefined
 
   try {
+    const executablePath = await preparePuppeteer()
+
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+
+    const page = await browser.newPage()
+
     let assetId = core.getInput('assetId')
     let assetName = core.getInput('assetName')
 
@@ -134,7 +138,7 @@ export async function run(): Promise<void> {
       core.setFailed(error.message)
     }
   } finally {
-    await browser.close()
+    await browser?.close()
   }
 }
 
@@ -234,10 +238,8 @@ async function setForumCookie(browser: Browser, page: Page): Promise<void> {
     domain: 'forum.cfx.re',
     path: '/',
     expires: -1,
-    size: 1,
     httpOnly: true,
-    secure: true,
-    session: false
+    secure: true
   })
 
   await page.evaluate(() => document.write('Cookie' + document.cookie))

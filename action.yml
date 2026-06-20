@@ -50,5 +50,5 @@ inputs:
     default: 2097152
 
 runs:
-  using: node20
-  main: dist/index.js
+  using: node24
+  main: dist/index.mjs

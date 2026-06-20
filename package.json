@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "author": "",
   "private": true,
+  "type": "module",
   "homepage": "https://github.com/Tynopia/cfx-portal-upload",
   "repository": {
     "type": "git",
@@ -18,30 +19,33 @@
     "setup"
   ],
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.mjs"
   },
   "engines": {
-    "node": ">=21"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "bundle": "npm run format:write && npm run package",
-    "ci-test": "npx jest",
+    "ci-test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "coverage": "npx make-coverage-badge --output-path ./badges/coverage.svg",
     "format:write": "npx prettier --write .",
     "format:check": "npx prettier --check .",
     "lint": "npx eslint . -c ./.github/linters/.eslintrc.yml",
     "local-action": "npx local-action . src/main.ts .env",
-    "package": "npx ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "package": "npx esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.mjs --sourcemap --legal-comments=external --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "package:watch": "npm run package -- --watch",
-    "test": "npx jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "all": "npm run format:write && npm run lint && npm run test && npm run coverage && npm run package"
   },
   "license": "MIT",
   "jest": {
-    "preset": "ts-jest",
+    "preset": "ts-jest/presets/default-esm",
     "verbose": true,
     "clearMocks": true,
     "testEnvironment": "node",
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
     "moduleFileExtensions": [
       "js",
       "ts"
@@ -54,7 +58,17 @@
       "/dist/"
     ],
     "transform": {
-      "^.+\\.ts$": "ts-jest"
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "isolatedModules": true
+        }
+      ]
+    },
+    "moduleNameMapper": {
+      "^puppeteer$": "<rootDir>/__tests__/mocks/puppeteer.ts",
+      "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "coverageReporters": [
       "json-summary",
@@ -68,10 +82,11 @@
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@puppeteer/browsers": "^2.6.1",
+    "@puppeteer/browsers": "^3.0.4",
     "axios": "^1.7.9",
     "form-data": "^4.0.1",
-    "puppeteer": "^23.10.4",
+    "puppeteer": "^25.1.0",
+    "yauzl": "^3.4.0",
     "yazl": "^3.3.1"
   },
   "devDependencies": {
@@ -79,10 +94,11 @@
     "@jest/globals": "^29.7.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.1",
+    "@types/yauzl": "^3.4.0",
     "@types/yazl": "^2.4.6",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
-    "@vercel/ncc": "^0.38.3",
+    "esbuild": "^0.28.1",
     "eslint": "^8.57.0",
     "eslint-plugin-jest": "^28.9.0",
     "eslint-plugin-jsonc": "^2.18.2",

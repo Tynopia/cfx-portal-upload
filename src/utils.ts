@@ -1,5 +1,6 @@
 import { Browser, getInstalledBrowsers, install } from '@puppeteer/browsers'
-import { AssetDetail, SearchResponse, Urls } from './types'
+import { PUPPETEER_REVISIONS } from 'puppeteer-core/internal/revisions.js'
+import { AssetDetail, SearchResponse, Urls } from './types.js'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -134,27 +135,36 @@ function getCacheDirectory(): string {
 
 /**
  * Prepare the Puppeteer environment by installing the necessary browser.
- * @returns {Promise<void>} Resolves when the environment is prepared.
+ * @returns {Promise<string | undefined>} The installed Chrome executable path.
  */
-export async function preparePuppeteer(): Promise<void> {
+export async function preparePuppeteer(): Promise<string | undefined> {
   if (process.env.RUNNER_TEMP === undefined) {
     core.info('Running locally, skipping Puppeteer setup ...')
     return
   }
 
   const cacheDirectory = getCacheDirectory()
+  const buildId = PUPPETEER_REVISIONS.chrome
   const installed = await getInstalledBrowsers({
     cacheDir: cacheDirectory
   })
+  const installedChrome = installed.find(
+    browser => browser.browser === Browser.CHROME && browser.buildId === buildId
+  )
 
-  if (!installed.some(browser => browser.browser === Browser.CHROME)) {
-    core.info('Installing Chrome ...')
-    await install({
-      cacheDir: cacheDirectory,
-      browser: Browser.CHROME,
-      buildId: '131.0.6778.108'
-    })
+  if (installedChrome) {
+    core.info(`Using Chrome ${buildId} from cache ...`)
+    return installedChrome.executablePath
   }
+
+  core.info(`Installing Chrome ${buildId} ...`)
+  const browser = await install({
+    cacheDir: cacheDirectory,
+    browser: Browser.CHROME,
+    buildId
+  })
+
+  return browser.executablePath
 }
 
 export async function resolveAssetId(
