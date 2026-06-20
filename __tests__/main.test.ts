@@ -1,29 +1,62 @@
 /* eslint-disable @typescript-eslint/unbound-method */
-import * as core from '@actions/core'
-import * as main from '../src/main'
-import puppeteer from 'puppeteer'
-import * as utils from '../src/utils'
-import axios from 'axios'
-import * as fs from 'fs'
+import { jest, describe, it, expect, beforeEach } from '@jest/globals'
+import {
+  registerAxiosMock,
+  registerCoreMock,
+  resetPackageMocks
+} from './helpers/mocks.js'
 
-jest.mock('@actions/core')
-jest.mock('puppeteer')
-jest.mock('../src/utils')
-jest.mock('axios')
-jest.mock('fs', () => {
-  const actualFs = jest.requireActual('fs') as unknown as typeof import('fs')
+const utilsMock = {
+  deleteIfExists: jest.fn(),
+  resolveAssetId: jest.fn(),
+  getEnv: jest.fn(),
+  getUrl: jest.fn(),
+  preparePuppeteer: jest.fn(),
+  zipAsset: jest.fn(),
+  isBetaAsset: jest.fn(),
+  getFxManifestVersion: jest.fn(),
+  getChangelog: jest.fn(),
+  getAssetVersions: jest.fn(),
+  deleteAssetVersion: jest.fn()
+}
+
+const fsMock = {
+  statSync: jest.fn(),
+  createReadStream: jest.fn()
+}
+
+function mockEmptyUpload(): void {
+  fsMock.statSync.mockReturnValue({ size: 0 })
+  fsMock.createReadStream.mockReturnValue({
+    [Symbol.asyncIterator]: () => ({
+      next: async () => {
+        await Promise.resolve()
+        return { done: true, value: undefined }
+      }
+    })
+  })
+}
+
+registerCoreMock()
+registerAxiosMock()
+jest.unstable_mockModule('../src/utils.js', () => utilsMock)
+jest.unstable_mockModule('fs', () => {
+  const actualFs = jest.requireActual<typeof import('fs')>('fs')
   return {
     ...actualFs,
-    statSync: jest.fn(actualFs.statSync),
-    createReadStream: jest.fn(actualFs.createReadStream)
+    statSync: fsMock.statSync,
+    createReadStream: fsMock.createReadStream
   }
 })
 
-describe('main', () => {
-  let getInputMock: jest.Mock
-  let setFailedMock: jest.Mock
-  let infoMock: jest.Mock
+const core = await import('@actions/core')
+const main = await import('../src/main.js')
+const puppeteer = (await import('puppeteer')).default
+const utils = await import('../src/utils.js')
+const axios = (await import('axios')).default
+const fs = await import('fs')
 
+describe('main', () => {
   let browserMock: {
     newPage: jest.Mock
     close: jest.Mock
@@ -38,11 +71,10 @@ describe('main', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
-
-    getInputMock = core.getInput as jest.Mock
-    setFailedMock = core.setFailed as jest.Mock
-    infoMock = core.info as jest.Mock
+    resetPackageMocks()
+    Object.values(utilsMock).forEach(mock => mock.mockReset())
+    Object.values(fsMock).forEach(mock => mock.mockReset())
+    mockEmptyUpload()
 
     pageMock = {
       goto: jest.fn(),
@@ -60,9 +92,8 @@ describe('main', () => {
         .mockResolvedValue([{ name: '_t', value: 'test-cookie' }])
     }
     ;(puppeteer.launch as jest.Mock).mockResolvedValue(browserMock)
-
-    // Default inputs
-    getInputMock.mockImplementation((name: string) => {
+    ;(utils.preparePuppeteer as jest.Mock).mockResolvedValue('/chrome')
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'chunkSize':
           return '1024'
@@ -87,20 +118,20 @@ describe('main', () => {
   })
 
   it('should fail if chunkSize is not a number', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       if (name === 'chunkSize') return 'invalid'
       return ''
     })
 
     await main.run()
 
-    expect(setFailedMock).toHaveBeenCalledWith(
+    expect(core.setFailed).toHaveBeenCalledWith(
       'Invalid chunk size. Must be a number.'
     )
   })
 
   it('should fail if maxRetries is not a number', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       if (name === 'maxRetries') return 'invalid'
       if (name === 'chunkSize') return '1024'
       return ''
@@ -108,13 +139,13 @@ describe('main', () => {
 
     await main.run()
 
-    expect(setFailedMock).toHaveBeenCalledWith(
+    expect(core.setFailed).toHaveBeenCalledWith(
       'Invalid max retries. Must be a number.'
     )
   })
 
   it('should set beta to true if beta input is true', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'assetId':
           return '123'
@@ -134,13 +165,14 @@ describe('main', () => {
     pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
     pageMock.url.mockReturnValue('https://portal.cfx.re')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
+    ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
+    ;(fs.statSync as jest.Mock).mockReturnValue({ size: 0 })
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: { asset_id: 123, version_id: 456, errors: null }
     })
 
     await main.run()
 
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(axios.post as jest.Mock).toHaveBeenCalledWith(
       expect.stringContaining('REUPLOAD'),
       expect.objectContaining({ release_candidate: true }),
@@ -149,7 +181,7 @@ describe('main', () => {
   })
 
   it('should successfully complete the upload flow', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'assetId':
           return '123'
@@ -170,8 +202,6 @@ describe('main', () => {
     pageMock.url.mockReturnValue('https://portal.cfx.re')
     ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
     ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
-
-    // Mock axios for startReupload, uploadZip (internal chunks), and completeUpload
     ;(axios.post as jest.Mock).mockResolvedValue({
       data: {
         asset_id: 123,
@@ -179,8 +209,6 @@ describe('main', () => {
         errors: null
       }
     })
-
-    // Mock fs for uploadZip
     ;(fs.statSync as jest.Mock).mockReturnValue({ size: 2048 })
     ;(fs.createReadStream as jest.Mock).mockReturnValue({
       [Symbol.asyncIterator]: async function* () {
@@ -193,19 +221,23 @@ describe('main', () => {
     await main.run()
 
     expect(utils.preparePuppeteer).toHaveBeenCalled()
-    expect(puppeteer.launch as jest.Mock).toHaveBeenCalled()
+    expect(puppeteer.launch as jest.Mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executablePath: '/chrome'
+      })
+    )
     expect(pageMock.goto).toHaveBeenCalledWith(
       'https://sso-url',
       expect.anything()
     )
-    expect(infoMock).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       'Redirected to CFX Portal. Uploading file ...'
     )
     expect(browserMock.close).toHaveBeenCalled()
   })
 
   it('should resolve assetId from assetName if assetId is not provided', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'assetName':
           return 'my-asset'
@@ -241,13 +273,13 @@ describe('main', () => {
       'my-asset',
       expect.anything()
     )
-    expect(infoMock).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       'Redirected to CFX Portal. Uploading file ...'
     )
   })
 
   it('should use provided zipPath and not call zipAsset', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'assetId':
           return '123'
@@ -272,13 +304,13 @@ describe('main', () => {
     await main.run()
 
     expect(utils.zipAsset).not.toHaveBeenCalled()
-    expect(infoMock).toHaveBeenCalledWith(
+    expect(core.info).toHaveBeenCalledWith(
       'Redirected to CFX Portal. Uploading file ...'
     )
   })
 
   it('should delete older versions if deleteOlderVersions is true', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'assetId':
           return '123'
@@ -319,7 +351,7 @@ describe('main', () => {
 
     await main.run()
 
-    expect(infoMock).toHaveBeenCalledWith('Deleting older versions ...')
+    expect(core.info).toHaveBeenCalledWith('Deleting older versions ...')
     expect(utils.deleteAssetVersion).toHaveBeenCalledWith(
       '123',
       111,
@@ -333,7 +365,7 @@ describe('main', () => {
   })
 
   it('should skip upload if skipUpload is true', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       if (name === 'skipUpload') return 'true'
       if (name === 'chunkSize') return '1024'
       if (name === 'maxRetries') return '1'
@@ -345,13 +377,13 @@ describe('main', () => {
 
     await main.run()
 
-    expect(infoMock).toHaveBeenCalledWith('Redirected to CFX Portal.')
-    expect(infoMock).toHaveBeenCalledWith('Skipping upload...')
+    expect(core.info).toHaveBeenCalledWith('Redirected to CFX Portal.')
+    expect(core.info).toHaveBeenCalledWith('Skipping upload...')
     expect(axios.post).not.toHaveBeenCalled()
   })
 
   it('should handle axios errors gracefully', async () => {
-    getInputMock.mockImplementation((name: string) => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       if (name === 'chunkSize') return '1024'
       if (name === 'maxRetries') return '1'
       if (name === 'assetId') return '123'

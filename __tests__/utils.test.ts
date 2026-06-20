@@ -1,13 +1,29 @@
 /* eslint-disable @typescript-eslint/unbound-method */
-import * as fs from 'fs'
-import * as path from 'path'
-import axios from 'axios'
-import * as core from '@actions/core'
+import { jest, describe, it, expect, beforeEach, afterAll } from '@jest/globals'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import yazl from 'yazl'
-import yauzl from 'yauzl'
-import { install, getInstalledBrowsers, Browser } from '@puppeteer/browsers'
-import { Urls } from '../src/types'
 import {
+  coreMock,
+  puppeteerBrowsersMock,
+  registerAxiosMock,
+  registerCoreMock,
+  registerPuppeteerBrowsersMock,
+  resetPackageMocks
+} from './helpers/mocks.js'
+
+registerAxiosMock()
+registerCoreMock()
+registerPuppeteerBrowsersMock()
+
+const axios = (await import('axios')).default
+const core = await import('@actions/core')
+const { PUPPETEER_REVISIONS } = await import(
+  'puppeteer-core/internal/revisions.js'
+)
+const { Urls } = await import('../src/types.js')
+const {
   getUrl,
   getEnv,
   isBetaAsset,
@@ -22,231 +38,130 @@ import {
   deleteAssetVersion,
   preparePuppeteer,
   zipAsset
-} from '../src/utils'
+} = await import('../src/utils.js')
 
-jest.mock('fs', () => {
-  const actualFs = jest.requireActual<typeof import('fs')>('fs')
+function makeTempDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'cfx-portal-upload-'))
+}
 
-  return {
-    ...actualFs,
-    existsSync: jest.fn(),
-    readFileSync: jest.fn(),
-    lstatSync: jest.fn(),
-    rmSync: jest.fn(),
-    unlinkSync: jest.fn(),
-    statSync: jest.fn(),
-    readdirSync: jest.fn(),
-    createWriteStream: jest.fn().mockReturnValue({
-      on: jest
-        .fn()
-        .mockImplementation((event: string, cb: () => void): object => {
-          if (event === 'close') cb()
-          return { on: jest.fn() }
-        })
-    }),
-    promises: {
-      ...actualFs.promises,
-      access: jest.fn()
-    }
+const tempDirs: string[] = []
+const tempFiles: string[] = []
+
+async function createZip(entries: Record<string, string>): Promise<string> {
+  const zipDir = makeTempDir()
+  tempDirs.push(zipDir)
+  const zipPath = path.join(zipDir, 'test.zip')
+  const zipfile = new yazl.ZipFile()
+
+  for (const [filePath, content] of Object.entries(entries)) {
+    zipfile.addBuffer(Buffer.from(content), filePath)
   }
-})
-jest.mock('axios')
-jest.mock('@actions/core')
-jest.mock('@puppeteer/browsers')
-jest.mock('yazl')
-jest.mock('yauzl')
+
+  zipfile.end()
+
+  return new Promise((resolve, reject) => {
+    zipfile.outputStream
+      .pipe(fs.createWriteStream(zipPath))
+      .on('close', () => resolve(zipPath))
+      .on('error', reject)
+  })
+}
 
 describe('utils', () => {
   const originalEnv = process.env
 
   beforeEach(() => {
-    jest.resetAllMocks()
+    resetPackageMocks()
     process.env = { ...originalEnv }
     clearFileCache()
   })
 
   afterAll(() => {
     process.env = originalEnv
+
+    for (const dir of tempDirs) {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+
+    for (const file of tempFiles) {
+      fs.rmSync(file, { force: true })
+    }
   })
 
-  const setupZipMock = (fileName: string, content: string): void => {
-    const mockStream = {
-      on: jest
-        .fn()
-        .mockImplementation((event: string, cb: (data?: string) => void) => {
-          if (event === 'data') cb(content)
-          if (event === 'end') cb()
-          return mockStream
-        })
-    }
-    const mockZipFile = {
-      readEntry: jest.fn(),
-      on: jest
-        .fn()
-        .mockImplementation(
-          (event: string, cb: (entry?: { fileName: string }) => void) => {
-            if (event === 'entry') cb({ fileName })
-            return mockZipFile
-          }
-        ),
-      openReadStream: jest
-        .fn()
-        .mockImplementation(
-          (
-            entry: { fileName: string },
-            cb: (err: Error | null, stream: typeof mockStream) => void
-          ) => {
-            cb(null, mockStream)
-          }
-        )
-    }
-    ;(yauzl.open as unknown as jest.Mock).mockImplementation(
-      (
-        _path: string,
-        _options: object,
-        cb: (err: Error | null, zip: typeof mockZipFile) => void
-      ) => {
-        cb(null, mockZipFile)
-      }
-    )
-    ;(fs.existsSync as jest.Mock).mockReturnValue(true)
+  function createWorkspace(): string {
+    const workspace = makeTempDir()
+    tempDirs.push(workspace)
+    process.env.GITHUB_WORKSPACE = workspace
+    return workspace
   }
 
   describe('zipAsset', () => {
     it('should create a zip file successfully', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      const mockZipFile = {
-        addFile: jest.fn(),
-        end: jest.fn(),
-        outputStream: {
-          pipe: jest.fn().mockReturnValue({
-            on: jest
-              .fn()
-              .mockImplementation((event: string, cb: () => void): object => {
-                if (event === 'close') cb()
-                return { on: jest.fn().mockReturnValue({ on: jest.fn() }) }
-              })
-          })
-        }
-      }
-      ;(yazl.ZipFile as unknown as jest.Mock).mockReturnValue(mockZipFile)
-      ;(fs.readdirSync as jest.Mock).mockImplementation(
-        (p: string, options?: { withFileTypes?: boolean }) => {
-          if (p === '/workspace') {
-            if (options?.withFileTypes) {
-              return [
-                {
-                  name: 'file1.txt',
-                  isDirectory: () => false,
-                  isFile: () => true
-                },
-                { name: 'subdir', isDirectory: () => true, isFile: () => false }
-              ]
-            }
-            return ['file1.txt', 'subdir']
-          }
-          if (p === path.join('/workspace', 'subdir')) {
-            if (options?.withFileTypes) {
-              return [
-                {
-                  name: 'file2.txt',
-                  isDirectory: () => false,
-                  isFile: () => true
-                }
-              ]
-            }
-            return ['file2.txt']
-          }
-          return []
-        }
-      )
-      ;(fs.statSync as jest.Mock).mockImplementation(p => {
-        if (p === '/workspace' || p === path.join('/workspace', 'subdir')) {
-          return { isDirectory: () => true, isFile: () => false }
-        }
-        return { isDirectory: () => false, isFile: () => true }
-      })
+      const workspace = createWorkspace()
+      fs.writeFileSync(path.join(workspace, 'file1.txt'), 'file1')
+      fs.mkdirSync(path.join(workspace, 'subdir'))
+      fs.writeFileSync(path.join(workspace, 'subdir', 'file2.txt'), 'file2')
 
       const zipPath = await zipAsset('my-asset')
+      tempFiles.push(zipPath)
 
       expect(zipPath).toContain('my-asset.zip')
-      expect(mockZipFile.addFile).toHaveBeenCalledTimes(2)
-      expect(mockZipFile.end).toHaveBeenCalled()
+      expect(fs.existsSync(zipPath)).toBe(true)
+
+      const content = await getCachedFileContent(
+        'subdir/file2.txt',
+        zipPath,
+        true
+      )
+      expect(content).toBe('file2')
     })
   })
 
   describe('getCachedFileContent', () => {
     it('should return cached content if available', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('content1')
+      const workspace = createWorkspace()
+      const filePath = path.join(workspace, 'file-cached.txt')
+      fs.writeFileSync(filePath, 'content1')
 
-      // Use a unique filename to avoid cache collision with other tests if needed
       const content = await getCachedFileContent('file-cached.txt')
       expect(content).toBe('content1')
 
-      // Second call should use cache (even if we change readFileSync return)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('content2')
+      fs.writeFileSync(filePath, 'content2')
       const contentCached = await getCachedFileContent('file-cached.txt')
       expect(contentCached).toBe('content1')
     })
 
     it('should read from zip if zipPath is provided and exists', async () => {
-      setupZipMock('file-in-zip.txt', 'zip-content')
+      const zipPath = await createZip({ 'file-in-zip.txt': 'zip-content' })
 
-      const content = await getCachedFileContent('file-in-zip.txt', 'test.zip')
+      const content = await getCachedFileContent('file-in-zip.txt', zipPath)
       expect(content).toBe('zip-content')
-      expect(yauzl.open).toHaveBeenCalledWith(
-        'test.zip',
-        { lazyEntries: true },
-        expect.any(Function)
-      )
     })
 
     it('should find file one level deeper in zip if allowOneLevelDeeper is true', async () => {
-      setupZipMock('subdir/file-in-zip.txt', 'zip-content-deeper')
+      const zipPath = await createZip({
+        'subdir/file-in-zip.txt': 'zip-content-deeper'
+      })
 
       const content = await getCachedFileContent(
         'file-in-zip.txt',
-        'test.zip',
+        zipPath,
         true
       )
       expect(content).toBe('zip-content-deeper')
     })
 
     it('should find file one level deeper locally if allowOneLevelDeeper is true', async () => {
-      const workspacePath = path.resolve('/workspace')
-      process.env.GITHUB_WORKSPACE = workspacePath
-      const filePath = 'file.txt'
-      const fullPath = path.join(workspacePath, filePath)
-      const deeperPath = path.join(workspacePath, 'subdir', filePath)
+      const workspace = createWorkspace()
+      fs.mkdirSync(path.join(workspace, 'subdir'))
+      fs.writeFileSync(path.join(workspace, 'subdir', 'file.txt'), 'deeper')
 
-      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p === fullPath) return false
-        if (p === deeperPath) return true
-        return false
-      })
-      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
-        if (path.resolve(p) === workspacePath) {
-          return [
-            {
-              name: 'subdir',
-              isDirectory: () => true
-            }
-          ]
-        }
-        return []
-      })
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('deeper-content')
-
-      const content = await getCachedFileContent(filePath, undefined, true)
-      expect(content).toBe('deeper-content')
-      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
+      const content = await getCachedFileContent('file.txt', undefined, true)
+      expect(content).toBe('deeper')
     })
 
     it('should throw error if file not found locally', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(false)
+      createWorkspace()
 
       await expect(getCachedFileContent('missing.txt')).rejects.toThrow(
         'File missing.txt not found'
@@ -257,7 +172,8 @@ describe('utils', () => {
   describe('preparePuppeteer', () => {
     it('should skip if RUNNER_TEMP is not set', async () => {
       delete process.env.RUNNER_TEMP
-      await preparePuppeteer()
+
+      await expect(preparePuppeteer()).resolves.toBeUndefined()
       expect(core.info as jest.Mock).toHaveBeenCalledWith(
         'Running locally, skipping Puppeteer setup ...'
       )
@@ -265,27 +181,36 @@ describe('utils', () => {
 
     it('should install Chrome if not installed', async () => {
       process.env.RUNNER_TEMP = '/tmp'
-      ;(getInstalledBrowsers as jest.Mock).mockResolvedValue([])
-      ;(install as jest.Mock).mockResolvedValue({})
+      puppeteerBrowsersMock.getInstalledBrowsers.mockResolvedValue([])
+      puppeteerBrowsersMock.install.mockResolvedValue({
+        executablePath: '/chrome'
+      })
 
-      await preparePuppeteer()
+      const executablePath = await preparePuppeteer()
 
-      expect(install).toHaveBeenCalledWith(
+      expect(puppeteerBrowsersMock.install).toHaveBeenCalledWith(
         expect.objectContaining({
-          browser: Browser.CHROME
+          browser: puppeteerBrowsersMock.Browser.CHROME,
+          buildId: PUPPETEER_REVISIONS.chrome
         })
       )
+      expect(executablePath).toBe('/chrome')
     })
 
-    it('should not install Chrome if already installed', async () => {
+    it('should not install Chrome if the expected build is already installed', async () => {
       process.env.RUNNER_TEMP = '/tmp'
-      ;(getInstalledBrowsers as jest.Mock).mockResolvedValue([
-        { browser: Browser.CHROME }
+      puppeteerBrowsersMock.getInstalledBrowsers.mockResolvedValue([
+        {
+          browser: puppeteerBrowsersMock.Browser.CHROME,
+          buildId: PUPPETEER_REVISIONS.chrome,
+          executablePath: '/cached-chrome'
+        }
       ])
 
-      await preparePuppeteer()
+      const executablePath = await preparePuppeteer()
 
-      expect(install).not.toHaveBeenCalled()
+      expect(puppeteerBrowsersMock.install).not.toHaveBeenCalled()
+      expect(executablePath).toBe('/cached-chrome')
     })
   })
 
@@ -349,16 +274,15 @@ describe('utils', () => {
 
   describe('isBetaAsset', () => {
     it('should return false if fxmanifest.lua not found', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(false)
+      createWorkspace()
 
       await expect(isBetaAsset()).resolves.toBe(false)
     })
 
     it('should return true if beta tag is present', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue(
+      const workspace = createWorkspace()
+      fs.writeFileSync(
+        path.join(workspace, 'fxmanifest.lua'),
         "version '1.0.0'\nbeta 'true'"
       )
 
@@ -366,88 +290,66 @@ describe('utils', () => {
     })
 
     it('should find fxmanifest.lua one level deeper locally', async () => {
-      const workspacePath = path.resolve('/workspace')
-      process.env.GITHUB_WORKSPACE = workspacePath
-      const deeperPath = path.join(workspacePath, 'subdir', 'fxmanifest.lua')
-
-      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p === path.join(workspacePath, 'fxmanifest.lua')) return false
-        if (p === deeperPath) return true
-        return false
-      })
-      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
-        if (path.resolve(p) === workspacePath) {
-          return [{ name: 'subdir', isDirectory: () => true }]
-        }
-        return []
-      })
-      ;(fs.readFileSync as jest.Mock).mockReturnValue("beta 'true'")
+      const workspace = createWorkspace()
+      fs.mkdirSync(path.join(workspace, 'subdir'))
+      fs.writeFileSync(
+        path.join(workspace, 'subdir', 'fxmanifest.lua'),
+        "beta 'true'"
+      )
 
       await expect(isBetaAsset()).resolves.toBe(true)
-      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
     })
 
     it('should return false if beta tag is missing', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue("version '1.0.0'")
+      const workspace = createWorkspace()
+      fs.writeFileSync(
+        path.join(workspace, 'fxmanifest.lua'),
+        "version '1.0.0'"
+      )
 
       await expect(isBetaAsset()).resolves.toBe(false)
     })
 
     it('should read from zip if zipPath is provided', async () => {
-      setupZipMock('fxmanifest.lua', "beta 'true'")
+      const zipPath = await createZip({ 'fxmanifest.lua': "beta 'true'" })
 
-      await expect(isBetaAsset('test.zip')).resolves.toBe(true)
-      expect(yauzl.open).toHaveBeenCalledWith(
-        'test.zip',
-        { lazyEntries: true },
-        expect.any(Function)
-      )
+      await expect(isBetaAsset(zipPath)).resolves.toBe(true)
     })
 
     it('should read from zip one level deeper', async () => {
-      setupZipMock('subdir/fxmanifest.lua', "beta 'true'")
+      const zipPath = await createZip({
+        'subdir/fxmanifest.lua': "beta 'true'"
+      })
 
-      await expect(isBetaAsset('test.zip')).resolves.toBe(true)
+      await expect(isBetaAsset(zipPath)).resolves.toBe(true)
     })
   })
 
   describe('getFxManifestVersion', () => {
     it('should return version string', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue("version '1.2.3'")
+      const workspace = createWorkspace()
+      fs.writeFileSync(
+        path.join(workspace, 'fxmanifest.lua'),
+        "version '1.2.3'"
+      )
 
       await expect(getFxManifestVersion()).resolves.toBe('1.2.3')
     })
 
     it('should find fxmanifest.lua one level deeper locally', async () => {
-      const workspacePath = path.resolve('/workspace')
-      process.env.GITHUB_WORKSPACE = workspacePath
-      const deeperPath = path.join(workspacePath, 'subdir', 'fxmanifest.lua')
-
-      ;(fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p === path.join(workspacePath, 'fxmanifest.lua')) return false
-        if (p === deeperPath) return true
-        return false
-      })
-      ;(fs.readdirSync as jest.Mock).mockImplementation((p: string) => {
-        if (path.resolve(p) === workspacePath) {
-          return [{ name: 'subdir', isDirectory: () => true }]
-        }
-        return []
-      })
-      ;(fs.readFileSync as jest.Mock).mockReturnValue("version '2.3.4'")
+      const workspace = createWorkspace()
+      fs.mkdirSync(path.join(workspace, 'subdir'))
+      fs.writeFileSync(
+        path.join(workspace, 'subdir', 'fxmanifest.lua'),
+        "version '2.3.4'"
+      )
 
       await expect(getFxManifestVersion()).resolves.toBe('2.3.4')
-      expect(fs.readFileSync).toHaveBeenCalledWith(deeperPath, 'utf8')
     })
 
     it('should throw error if version tag is missing', async () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('')
+      const workspace = createWorkspace()
+      fs.writeFileSync(path.join(workspace, 'fxmanifest.lua'), '')
 
       await expect(getFxManifestVersion()).rejects.toThrow(
         "fxmanifest.lua does not have a `version '...'` tag."
@@ -455,15 +357,17 @@ describe('utils', () => {
     })
 
     it('should read from zip if zipPath is provided', async () => {
-      setupZipMock('fxmanifest.lua', "version '2.0.0'")
+      const zipPath = await createZip({ 'fxmanifest.lua': "version '2.0.0'" })
 
-      await expect(getFxManifestVersion('test.zip')).resolves.toBe('2.0.0')
+      await expect(getFxManifestVersion(zipPath)).resolves.toBe('2.0.0')
     })
 
     it('should read from zip one level deeper', async () => {
-      setupZipMock('subdir/fxmanifest.lua', "version '3.0.0'")
+      const zipPath = await createZip({
+        'subdir/fxmanifest.lua': "version '3.0.0'"
+      })
 
-      await expect(getFxManifestVersion('test.zip')).resolves.toBe('3.0.0')
+      await expect(getFxManifestVersion(zipPath)).resolves.toBe('3.0.0')
     })
   })
 
@@ -509,9 +413,11 @@ describe('utils', () => {
 
   describe('getCommitMessage', () => {
     it('should return commit message from GITHUB_EVENT_PATH', () => {
-      process.env.GITHUB_EVENT_PATH = '/event.json'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue(
+      const workspace = createWorkspace()
+      const eventPath = path.join(workspace, 'event.json')
+      process.env.GITHUB_EVENT_PATH = eventPath
+      fs.writeFileSync(
+        eventPath,
         JSON.stringify({ head_commit: { message: 'feat: new feature' } })
       )
 
@@ -524,9 +430,10 @@ describe('utils', () => {
     })
 
     it('should return default message if JSON parsing fails', () => {
-      process.env.GITHUB_EVENT_PATH = '/event.json'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('invalid json')
+      const workspace = createWorkspace()
+      const eventPath = path.join(workspace, 'event.json')
+      process.env.GITHUB_EVENT_PATH = eventPath
+      fs.writeFileSync(eventPath, 'invalid json')
 
       expect(getCommitMessage()).toBe('No changelog provided')
       expect(core.debug).toHaveBeenCalledWith(
@@ -537,66 +444,54 @@ describe('utils', () => {
 
   describe('getChangelog', () => {
     it('should return input changelog if provided', async () => {
-      ;(core.getInput as jest.Mock).mockReturnValue('manual changelog')
+      ;(coreMock.getInput as jest.Mock).mockReturnValue('manual changelog')
       await expect(getChangelog()).resolves.toBe('manual changelog')
     })
 
     it('should return content from changelogFile if provided', async () => {
-      ;(core.getInput as jest.Mock).mockImplementation(name => {
+      const workspace = createWorkspace()
+      fs.writeFileSync(path.join(workspace, 'CHANGELOG.md'), 'file content')
+      ;(coreMock.getInput as jest.Mock).mockImplementation(name => {
         if (name === 'changelog') return ''
         if (name === 'changelogFile') return 'CHANGELOG.md'
         return ''
       })
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.readFileSync as jest.Mock).mockReturnValue('file content')
 
       await expect(getChangelog()).resolves.toBe('file content')
     })
 
     it('should read changelog from zip if zipPath is provided', async () => {
-      ;(core.getInput as jest.Mock).mockImplementation(name => {
+      ;(coreMock.getInput as jest.Mock).mockImplementation(name => {
         if (name === 'changelog') return ''
         if (name === 'changelogFile') return 'CHANGELOG.md'
         return ''
       })
 
-      setupZipMock('CHANGELOG.md', 'zip-changelog')
+      const zipPath = await createZip({ 'CHANGELOG.md': 'zip-changelog' })
 
-      await expect(getChangelog('test.zip')).resolves.toBe('zip-changelog')
+      await expect(getChangelog(zipPath)).resolves.toBe('zip-changelog')
     })
   })
 
   describe('deleteIfExists', () => {
     it('should delete directory if it exists', () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.lstatSync as jest.Mock).mockReturnValue({
-        isDirectory: () => true,
-        isFile: () => false
-      })
+      const workspace = createWorkspace()
+      const dirPath = path.join(workspace, 'test-dir')
+      fs.mkdirSync(dirPath)
 
       deleteIfExists('test-dir')
 
-      expect(fs.rmSync).toHaveBeenCalledWith(
-        path.join('/workspace', 'test-dir'),
-        { recursive: true, force: true }
-      )
+      expect(fs.existsSync(dirPath)).toBe(false)
     })
 
     it('should delete file if it exists', () => {
-      process.env.GITHUB_WORKSPACE = '/workspace'
-      ;(fs.existsSync as jest.Mock).mockReturnValue(true)
-      ;(fs.lstatSync as jest.Mock).mockReturnValue({
-        isDirectory: () => false,
-        isFile: () => true
-      })
+      const workspace = createWorkspace()
+      const filePath = path.join(workspace, 'test-file')
+      fs.writeFileSync(filePath, 'content')
 
       deleteIfExists('test-file')
 
-      expect(fs.unlinkSync).toHaveBeenCalledWith(
-        path.join('/workspace', 'test-file')
-      )
+      expect(fs.existsSync(filePath)).toBe(false)
     })
   })
 })
