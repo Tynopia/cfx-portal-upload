@@ -7,6 +7,13 @@ on:
   push:
     branches:
       - main
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -15,6 +22,7 @@ jobs:
   test-typescript:
     name: TypeScript Tests
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run'
 
     steps:
       - name: Checkout
@@ -47,15 +55,54 @@ jobs:
   cfx-portal-upload:
     name: GitHub Actions Test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if:
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Checkout
         id: checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Get Release Version
+        id: release-version
+        shell: bash
+        run: |
+          git fetch --force --tags
+
+          tag="$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | sort -V | tail -n 1)"
+          if [ -z "$tag" ]; then
+            echo "No release tag found for ${{ github.event.workflow_run.head_sha }}. Skipping portal upload."
+            echo "should_upload=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "should_upload=true" >> "$GITHUB_OUTPUT"
+
+      - name: Update Test Asset Version
+        id: update-test-version
+        if: steps.release-version.outputs.should_upload == 'true'
+        shell: bash
+        run: |
+          version="${{ steps.release-version.outputs.version }}"
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          unzip -q ./test.zip -d "$workdir"
+          sed -i -E "s/^version ['\"][^'\"]+['\"]/version \"${version}\"/" "$workdir/test/fxmanifest.lua"
+
+          rm ./test.zip
+          (cd "$workdir" && zip -qr "$GITHUB_WORKSPACE/test.zip" test)
 
       - name: Test Local Action
         id: cfx-portal-upload
+        if: steps.release-version.outputs.should_upload == 'true'
         uses: ./
         with:
           cookie: ${{ secrets.FORUM_COOKIE }}

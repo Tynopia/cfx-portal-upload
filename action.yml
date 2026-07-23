@@ -31,6 +31,10 @@ inputs:
   beta:
     description: 'Whether to upload as a release candidate'
     required: false
+  useShaVersion:
+    description: 'Use the short Git commit SHA as the version'
+    required: false
+    default: false
   changelog:
     description: 'The changelog for the new version'
     required: false

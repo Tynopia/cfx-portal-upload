@@ -119205,6 +119205,7 @@ async function run() {
     const makeZip = core2.getInput("makeZip").toLowerCase() === "true";
     const skipUpload = core2.getInput("skipUpload").toLowerCase() === "true";
     const deleteOlderVersions = core2.getInput("deleteOlderVersions").toLowerCase() === "true";
+    const useShaVersion = core2.getInput("useShaVersion").toLowerCase() === "true";
     const chunkSize = parseInt(core2.getInput("chunkSize"));
     const maxRetries = parseInt(core2.getInput("maxRetries"));
     if (isNaN(chunkSize)) {
@@ -119232,7 +119233,7 @@ async function run() {
       core2.debug("No asset id or name provided, using repository name...");
       assetName = basename4(getEnv2("GITHUB_WORKSPACE"));
     }
-    const version = await getFxManifestVersion(zipPath);
+    const version = useShaVersion ? getEnv2("GITHUB_SHA").slice(0, 7) : await getFxManifestVersion(zipPath);
     await loginToPortal(browser, page, maxRetries);
     core2.info("Redirected to CFX Portal. Uploading file ...");
     const cookies = await getCookies(browser);

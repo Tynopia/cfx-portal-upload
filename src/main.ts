@@ -47,6 +47,8 @@ export async function run(): Promise<void> {
     const skipUpload = core.getInput('skipUpload').toLowerCase() === 'true'
     const deleteOlderVersions =
       core.getInput('deleteOlderVersions').toLowerCase() === 'true'
+    const useShaVersion =
+      core.getInput('useShaVersion').toLowerCase() === 'true'
 
     const chunkSize = parseInt(core.getInput('chunkSize'))
     const maxRetries = parseInt(core.getInput('maxRetries'))
@@ -84,7 +86,9 @@ export async function run(): Promise<void> {
       assetName = basename(getEnv('GITHUB_WORKSPACE'))
     }
 
-    const version = await getFxManifestVersion(zipPath)
+    const version = useShaVersion
+      ? getEnv('GITHUB_SHA').slice(0, 7)
+      : await getFxManifestVersion(zipPath)
 
     await loginToPortal(browser, page, maxRetries)
 

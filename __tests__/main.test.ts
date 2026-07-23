@@ -180,6 +180,45 @@ describe('main', () => {
     )
   })
 
+  it('should use the short commit SHA as the version when enabled', async () => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
+      switch (name) {
+        case 'assetId':
+          return '123'
+        case 'zipPath':
+          return 'test.zip'
+        case 'useShaVersion':
+          return 'true'
+        case 'chunkSize':
+          return '1024'
+        case 'maxRetries':
+          return '1'
+        default:
+          return ''
+      }
+    })
+
+    pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
+    pageMock.url.mockReturnValue('https://portal.cfx.re')
+    ;(utils.getEnv as jest.Mock).mockReturnValue(
+      'fc36df5123456789abcdef0123456789abcdef01'
+    )
+    ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
+    ;(axios.post as jest.Mock).mockResolvedValue({
+      data: { asset_id: 123, version_id: 456, errors: null }
+    })
+
+    await main.run()
+
+    expect(utils.getEnv).toHaveBeenCalledWith('GITHUB_SHA')
+    expect(axios.post as jest.Mock).toHaveBeenCalledWith(
+      expect.stringContaining('REUPLOAD'),
+      expect.objectContaining({ version: 'fc36df5' }),
+      expect.anything()
+    )
+    expect(utils.getFxManifestVersion).not.toHaveBeenCalled()
+  })
+
   it('should successfully complete the upload flow', async () => {
     ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
       switch (name) {
