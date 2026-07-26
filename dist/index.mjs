@@ -119249,10 +119249,27 @@ async function run() {
       version,
       changelog
     );
+    core2.debug(`Uploaded version ID: ${uploadedVersionId}`);
     if (deleteOlderVersions) {
       core2.info("Deleting older versions ...");
-      const versions = await getAssetVersions(assetId, cookies);
+      let versions = await getAssetVersions(assetId, cookies);
+      let assetVersionInfo = versions.find((v2) => v2.id === uploadedVersionId);
+      const start = Date.now();
+      while (assetVersionInfo?.state !== "active") {
+        if (Date.now() - start >= 6e4) {
+          throw new Error(
+            `Timed out waiting for version ${uploadedVersionId} to become active (last state: ${assetVersionInfo?.state ?? "unknown"})`
+          );
+        }
+        await new Promise((resolve7) => setTimeout(resolve7, 1e3));
+        versions = await getAssetVersions(assetId, cookies);
+        assetVersionInfo = versions.find((v2) => v2.id === uploadedVersionId);
+      }
+      core2.debug(`Versions: ${JSON.stringify(versions)}`);
       for (const v2 of versions) {
+        core2.debug(
+          `Checking version ${v2.id} against ${uploadedVersionId}, ${v2.id !== uploadedVersionId}`
+        );
         if (v2.id !== uploadedVersionId) {
           await deleteAssetVersion(assetId, v2.id, cookies);
         }

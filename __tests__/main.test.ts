@@ -345,7 +345,7 @@ describe('main', () => {
       }
     })
     ;(utils.getAssetVersions as jest.Mock).mockResolvedValue([
-      { id: 456, version: '1.0.0' },
+      { id: 456, version: '1.0.0', state: 'active' },
       { id: 111, version: '0.9.0' }
     ])
 
@@ -362,6 +362,131 @@ describe('main', () => {
       456,
       expect.anything()
     )
+  })
+
+  it('should wait for the uploaded version to become active before deleting older versions', async () => {
+    jest.useFakeTimers()
+
+    try {
+      ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'assetId':
+            return '123'
+          case 'zipPath':
+            return 'test.zip'
+          case 'cookie':
+            return 'test-cookie'
+          case 'chunkSize':
+            return '1024'
+          case 'maxRetries':
+            return '1'
+          case 'deleteOlderVersions':
+            return 'true'
+          case 'makeZip':
+          case 'skipUpload':
+          case 'beta':
+            return 'false'
+          default:
+            return ''
+        }
+      })
+
+      pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
+      pageMock.url.mockReturnValue('https://portal.cfx.re')
+      ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
+      ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
+      ;(axios.post as jest.Mock).mockResolvedValue({
+        data: {
+          asset_id: 123,
+          version_id: 456,
+          errors: null
+        }
+      })
+      ;(utils.getAssetVersions as jest.Mock)
+        .mockResolvedValueOnce([
+          { id: 456, version: '1.0.0', state: 'processing' },
+          { id: 111, version: '0.9.0', state: 'active' }
+        ])
+        .mockResolvedValueOnce([
+          { id: 456, version: '1.0.0', state: 'active' },
+          { id: 111, version: '0.9.0', state: 'active' }
+        ])
+
+      const runPromise = main.run()
+      await jest.runAllTimersAsync()
+      await runPromise
+
+      expect(utils.getAssetVersions).toHaveBeenCalledTimes(2)
+      expect(utils.deleteAssetVersion).toHaveBeenCalledWith(
+        '123',
+        111,
+        expect.anything()
+      )
+      expect(utils.deleteAssetVersion).not.toHaveBeenCalledWith(
+        '123',
+        456,
+        expect.anything()
+      )
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('should fail after timing out while waiting for the uploaded version to become active', async () => {
+    ;(core.getInput as jest.Mock).mockImplementation((name: string) => {
+      switch (name) {
+        case 'assetId':
+          return '123'
+        case 'zipPath':
+          return 'test.zip'
+        case 'cookie':
+          return 'test-cookie'
+        case 'chunkSize':
+          return '1024'
+        case 'maxRetries':
+          return '1'
+        case 'deleteOlderVersions':
+          return 'true'
+        case 'makeZip':
+        case 'skipUpload':
+        case 'beta':
+          return 'false'
+        default:
+          return ''
+      }
+    })
+
+    pageMock.evaluate.mockResolvedValueOnce({ url: 'https://forum-redirect' })
+    pageMock.url.mockReturnValue('https://portal.cfx.re')
+    ;(utils.getFxManifestVersion as jest.Mock).mockReturnValue('1.0.0')
+    ;(utils.getChangelog as jest.Mock).mockReturnValue('test changelog')
+    ;(axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        asset_id: 123,
+        version_id: 456,
+        errors: null
+      }
+    })
+    ;(utils.getAssetVersions as jest.Mock).mockResolvedValue([
+      { id: 456, version: '1.0.0', state: 'processing' },
+      { id: 111, version: '0.9.0', state: 'active' }
+    ])
+
+    const dateNow = jest
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(60000)
+
+    try {
+      await main.run()
+
+      expect(core.setFailed).toHaveBeenCalledWith(
+        'Timed out waiting for version 456 to become active (last state: processing)'
+      )
+      expect(utils.deleteAssetVersion).not.toHaveBeenCalled()
+    } finally {
+      dateNow.mockRestore()
+    }
   })
 
   it('should skip upload if skipUpload is true', async () => {

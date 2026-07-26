@@ -106,10 +106,34 @@ export async function run(): Promise<void> {
       changelog
     )
 
+    core.debug(`Uploaded version ID: ${uploadedVersionId}`)
+
     if (deleteOlderVersions) {
       core.info('Deleting older versions ...')
-      const versions = await getAssetVersions(assetId, cookies)
+      let versions = await getAssetVersions(assetId, cookies)
+      let assetVersionInfo = versions.find(v => v.id === uploadedVersionId)
+
+      const start = Date.now()
+
+      while (assetVersionInfo?.state !== 'active') {
+        if (Date.now() - start >= 60000) {
+          throw new Error(
+            `Timed out waiting for version ${uploadedVersionId} to become active ` +
+              `(last state: ${assetVersionInfo?.state ?? 'unknown'})`
+          )
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        versions = await getAssetVersions(assetId, cookies)
+        assetVersionInfo = versions.find(v => v.id === uploadedVersionId)
+      }
+
+      core.debug(`Versions: ${JSON.stringify(versions)}`)
+
       for (const v of versions) {
+        core.debug(
+          `Checking version ${v.id} against ${uploadedVersionId}, ${v.id !== uploadedVersionId}`
+        )
         if (v.id !== uploadedVersionId) {
           await deleteAssetVersion(assetId, v.id, cookies)
         }
